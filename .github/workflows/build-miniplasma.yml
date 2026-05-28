@@ -66,7 +66,7 @@ jobs:
 
       - name: Build DLL (x64 with Start export)
         run: >
-          msbuild MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln
+          msbuild "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\PoC_AbortHydration_ArbitraryRegKey_EoP.csproj"
           /p:Configuration=Release /p:Platform=x64
           /p:PlatformTarget=x64
           /p:OutputPath=bin\x64\Release\
