@@ -91,8 +91,8 @@ jobs:
           # Patch IL
           $il = [IO.File]::ReadAllText($ilPath)
 
-          # 1. Insert vtfixup right after .module line
-          $il = [regex]::Replace($il, '(\.module\s+\S+[^\r\n]*(?:\r?\n))', "`$1.vtfixup [1] int64 fromunmanaged at VT_01`r`n.data VT_01 = int64(0)`r`n")
+          # 1. Insert vtfixup after the main .module line (not .module extern lines) — once only
+          $il = [regex]::Replace($il, '(?m)^(\.module\s+(?!extern)[^\r\n]+(?:\r?\n))', "`$1.vtfixup [1] int64 fromunmanaged at VT_01`r`n.data VT_01 = int64(0)`r`n", [Text.RegularExpressions.RegexOptions]::Multiline, 1)
 
           # 2. Inject .vtentry/.export inside Start() method body (after opening brace)
           $il = [regex]::Replace($il,
