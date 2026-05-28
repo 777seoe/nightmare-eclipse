@@ -16,7 +16,7 @@ jobs:
         run: nuget restore MiniPlasma/PoC_AbortHydration_ArbitraryRegKey_EoP.sln
 
       - name: Build solution
-        run: msbuild MiniPlasma/PoC_AbortHydration_ArbitraryRegKey_EoP.sln /p:Configuration=Release /p:Platform="Any CPU"
+        run: msbuild MiniPlasma/PoC_AbortHydration_ArbitraryRegKey_EoP.sln /p:Configuration=Release /p:Platform="Any CPU" /p:SignManifests=false
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
