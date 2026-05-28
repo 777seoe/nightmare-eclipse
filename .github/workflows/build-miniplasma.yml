@@ -145,8 +145,8 @@ jobs:
           $tmpDir = "$env:TEMP\launcher_build"
           New-Item -ItemType Directory -Force $tmpDir | Out-Null
 
-          # Launcher.cs: loads the DLL from same dir, calls Program.Main via reflection
-          $launcherB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwoKY2xhc3MgTGF1bmNoZXIKewogICAgc3RhdGljIHZvaWQgTWFpbihzdHJpbmdbXSBhcmdzKQogICAgewogICAgICAgIHN0cmluZyBkbGxQYXRoID0gUGF0aC5Db21iaW5lKAogICAgICAgICAgICBQYXRoLkdldERpcmVjdG9yeU5hbWUoQXNzZW1ibHkuR2V0RXhlY3V0aW5nQXNzZW1ibHkoKS5Mb2NhdGlvbiksCiAgICAgICAgICAgICJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5kbGwiKTsKICAgICAgICB2YXIgYXNtID0gQXNzZW1ibHkuTG9hZEZpbGUoZGxsUGF0aCk7CiAgICAgICAgdmFyIHQgPSBhc20uR2V0VHlwZSgiUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AuUHJvZ3JhbSIpOwogICAgICAgIHZhciBtID0gdC5HZXRNZXRob2QoIk1haW4iLCBCaW5kaW5nRmxhZ3MuU3RhdGljIHwgQmluZGluZ0ZsYWdzLlB1YmxpYyB8IEJpbmRpbmdGbGFncy5Ob25QdWJsaWMpOwogICAgICAgIG0uSW52b2tlKG51bGwsIG5ldyBvYmplY3RbXSB7IGFyZ3MgfSk7CiAgICB9Cn0="
+          # Launcher.cs: loads the DLL from same dir via UnsafeLoadFrom (works on network shares)
+          $launcherB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwoKY2xhc3MgTGF1bmNoZXIKewogICAgc3RhdGljIHZvaWQgTWFpbihzdHJpbmdbXSBhcmdzKQogICAgewogICAgICAgIHN0cmluZyBkbGxQYXRoID0gUGF0aC5Db21iaW5lKAogICAgICAgICAgICBQYXRoLkdldERpcmVjdG9yeU5hbWUoQXNzZW1ibHkuR2V0RXhlY3V0aW5nQXNzZW1ibHkoKS5Mb2NhdGlvbiksCiAgICAgICAgICAgICJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5kbGwiKTsKICAgICAgICB2YXIgYXNtID0gQXNzZW1ibHkuVW5zYWZlTG9hZEZyb20oZGxsUGF0aCk7CiAgICAgICAgdmFyIHQgPSBhc20uR2V0VHlwZSgiUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AuUHJvZ3JhbSIpOwogICAgICAgIHZhciBtID0gdC5HZXRNZXRob2QoIk1haW4iLCBCaW5kaW5nRmxhZ3MuU3RhdGljIHwgQmluZGluZ0ZsYWdzLlB1YmxpYyB8IEJpbmRpbmdGbGFncy5Ob25QdWJsaWMpOwogICAgICAgIG0uSW52b2tlKG51bGwsIG5ldyBvYmplY3RbXSB7IGFyZ3MgfSk7CiAgICB9Cn0="
           $csFile = "$tmpDir\Launcher.cs"
           [IO.File]::WriteAllBytes($csFile, [Convert]::FromBase64String($launcherB64))
 
