@@ -56,12 +56,12 @@ jobs:
           $csproj = [IO.File]::ReadAllText($csprojPath)
           $csproj = $csproj.Replace('<Compile Include="Program.cs" />', '<Compile Include="Export.cs" /><Compile Include="Program.cs" />')
 
-          # Add RGiesecke.DllExport assembly reference (needed so compiler resolves [DllExport])
-          $refLine = '<Reference Include="RGiesecke.DllExport"><HintPath>..\packages\UnmanagedExports.1.2.7\lib\net40\RGiesecke.DllExport.dll</HintPath></Reference>'
+          # Add RGiesecke.DllExport.Metadata reference (attribute stub — in lib\net\)
+          $refLine = '<Reference Include="RGiesecke.DllExport.Metadata"><HintPath>..\packages\UnmanagedExports.1.2.7\lib\net\RGiesecke.DllExport.Metadata.dll</HintPath></Reference>'
           $csproj = $csproj.Replace('<Reference Include="System" />', "$refLine`n    <Reference Include=`"System`" />")
 
-          # Add UnmanagedExports targets import (ildasm/ilasm post-processing for native export)
-          $importLine = '  <Import Project="..\packages\UnmanagedExports.1.2.7\build\RGiesecke.DllExport.targets" Condition="Exists(' + [char]39 + '..\packages\UnmanagedExports.1.2.7\build\RGiesecke.DllExport.targets' + [char]39 + ')" />'
+          # Add UnmanagedExports targets import (tools\, uses Mono.Cecil for IL post-processing)
+          $importLine = '  <Import Project="..\packages\UnmanagedExports.1.2.7\tools\RGiesecke.DllExport.targets" Condition="Exists(' + [char]39 + '..\packages\UnmanagedExports.1.2.7\tools\RGiesecke.DllExport.targets' + [char]39 + ')" />'
           $csproj = $csproj.Replace('</Project>', $importLine + "`r`n</Project>")
           [IO.File]::WriteAllText($csprojPath, $csproj, [Text.Encoding]::UTF8)
           Write-Output "Project patched"
