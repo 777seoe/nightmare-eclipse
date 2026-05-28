@@ -88,21 +88,49 @@ jobs:
           $ilSize = (Get-Item $ilPath).Length
           Write-Output "Disassembled — IL size: $ilSize bytes"
 
-          # Patch IL
+          # Patch IL (string-based, no regex — avoids timeout on large IL file)
           $il = [IO.File]::ReadAllText($ilPath)
 
-          # 1. Insert vtfixup after the main .module line (not .module extern lines) — once only
-          $il = [regex]::Replace($il, '(?m)^(\.module\s+(?!extern)[^\r\n]+(?:\r?\n))', "`$1.vtfixup [1] int64 fromunmanaged at VT_01`r`n.data VT_01 = int64(0)`r`n", [Text.RegularExpressions.RegexOptions]::Multiline, 1)
+          # 1. Find the main .module line (not .module extern) and insert vtfixup after it
+          $nlModule = "`r`n.module "
+          $searchFrom = 0
+          $moduleEnd = -1
+          while ($true) {
+              $idx = $il.IndexOf($nlModule, $searchFrom)
+              if ($idx -lt 0) { break }
+              $lineContent = $il.Substring($idx + 2)  # skip \r\n
+              if (-not $lineContent.StartsWith(".module extern")) {
+                  # Found the main .module line — find its end
+                  $lineEndIdx = $il.IndexOf("`r`n", $idx + 2)
+                  if ($lineEndIdx -lt 0) { $lineEndIdx = $il.Length }
+                  $moduleEnd = $lineEndIdx
+                  break
+              }
+              $searchFrom = $idx + 1
+          }
+          if ($moduleEnd -ge 0) {
+              $vtfixup = "`r`n.vtfixup [1] int64 fromunmanaged at VT_01`r`n.data VT_01 = int64(0)"
+              $il = $il.Substring(0, $moduleEnd) + $vtfixup + $il.Substring($moduleEnd)
+              Write-Output "vtfixup injected"
+          } else { Write-Output "WARNING: .module line not found" }
 
-          # 2. Inject .vtentry/.export inside Start() method body (after opening brace)
-          $il = [regex]::Replace($il,
-              '(void\s+Start\s*\([\s\S]*?\)\s*cil\s+managed\s*\{)',
-              "`$1`r`n    .vtentry 1 : 1`r`n    .export [1] as Start",
-              [Text.RegularExpressions.RegexOptions]::Singleline)
+          # 2. Find Start() method and inject .vtentry / .export after its opening brace
+          $startSig = "void  Start("  # ildasm uses double-space after void
+          $sigIdx = $il.IndexOf($startSig)
+          if ($sigIdx -lt 0) { $startSig = "void Start("; $sigIdx = $il.IndexOf($startSig) }
+          if ($sigIdx -ge 0) {
+              $cilIdx   = $il.IndexOf("cil managed", $sigIdx)
+              $braceIdx = $il.IndexOf("{", $cilIdx)
+              if ($braceIdx -ge 0) {
+                  $inject = "`r`n    .vtentry 1 : 1`r`n    .export [1] as Start"
+                  $il = $il.Substring(0, $braceIdx + 1) + $inject + $il.Substring($braceIdx + 1)
+                  Write-Output ".vtentry/.export injected into Start()"
+              } else { Write-Output "WARNING: opening brace for Start() not found" }
+          } else { Write-Output "WARNING: Start() method signature not found" }
 
           $modIl = "$work\poc_export.il"
           [IO.File]::WriteAllText($modIl, $il)
-          Write-Output "IL patched"
+          Write-Output "IL patched and written"
 
           # Reassemble (include .res if present)
           $resFile = "$work\poc.res"
