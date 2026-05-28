@@ -138,28 +138,26 @@ jobs:
               Write-Output "DLL staged: $((Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll").Length) bytes"
           } else { throw "ilasm failed" }
 
-      # ── Build thin launcher EXE ────────────────────────────────────────────
+      # ── Build thin launcher EXE via csc.exe directly ─────────────────────
       - name: Build thin launcher EXE
         shell: pwsh
         run: |
-          $launcherDir = "MiniPlasma\Launcher"
-          New-Item -ItemType Directory -Force $launcherDir | Out-Null
+          $tmpDir = "$env:TEMP\launcher_build"
+          New-Item -ItemType Directory -Force $tmpDir | Out-Null
 
           # Launcher.cs: loads the DLL from same dir, calls Program.Main via reflection
           $launcherB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwoKY2xhc3MgTGF1bmNoZXIKewogICAgc3RhdGljIHZvaWQgTWFpbihzdHJpbmdbXSBhcmdzKQogICAgewogICAgICAgIHN0cmluZyBkbGxQYXRoID0gUGF0aC5Db21iaW5lKAogICAgICAgICAgICBQYXRoLkdldERpcmVjdG9yeU5hbWUoQXNzZW1ibHkuR2V0RXhlY3V0aW5nQXNzZW1ibHkoKS5Mb2NhdGlvbiksCiAgICAgICAgICAgICJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5kbGwiKTsKICAgICAgICB2YXIgYXNtID0gQXNzZW1ibHkuTG9hZEZpbGUoZGxsUGF0aCk7CiAgICAgICAgdmFyIHQgPSBhc20uR2V0VHlwZSgiUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AuUHJvZ3JhbSIpOwogICAgICAgIHZhciBtID0gdC5HZXRNZXRob2QoIk1haW4iLCBCaW5kaW5nRmxhZ3MuU3RhdGljIHwgQmluZGluZ0ZsYWdzLlB1YmxpYyB8IEJpbmRpbmdGbGFncy5Ob25QdWJsaWMpOwogICAgICAgIG0uSW52b2tlKG51bGwsIG5ldyBvYmplY3RbXSB7IGFyZ3MgfSk7CiAgICB9Cn0="
-          [IO.File]::WriteAllBytes("$launcherDir\Launcher.cs", [Convert]::FromBase64String($launcherB64))
+          $csFile = "$tmpDir\Launcher.cs"
+          [IO.File]::WriteAllBytes($csFile, [Convert]::FromBase64String($launcherB64))
 
-          # Launcher.csproj
-          $projB64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPFByb2plY3QgVG9vbHNWZXJzaW9uPSIxNS4wIiB4bWxucz0iaHR0cDovL3NjaGVtYXMubWljcm9zb2Z0LmNvbS9kZXZlbG9wZXIvbXNidWlsZC8yMDAzIj4KICA8SW1wb3J0IFByb2plY3Q9IiQoTVNCdWlsZFRvb2xzUGF0aClcTWljcm9zb2Z0LkNTaGFycC50YXJnZXRzIiAvPgogIDxQcm9wZXJ0eUdyb3VwPgogICAgPENvbmZpZ3VyYXRpb24+UmVsZWFzZTwvQ29uZmlndXJhdGlvbj4KICAgIDxQbGF0Zm9ybT5BbnlDUFU8L1BsYXRmb3JtPgogICAgPE91dHB1dFR5cGU+RXhlPC9PdXRwdXRUeXBlPgogICAgPFRhcmdldEZyYW1ld29ya1ZlcnNpb24+djQuOC4xPC9UYXJnZXRGcmFtZXdvcmtWZXJzaW9uPgogICAgPEFzc2VtYmx5TmFtZT5Qb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUDwvQXNzZW1ibHlOYW1lPgogICAgPE91dHB1dFBhdGg+YmluXFJlbGVhc2VcPC9PdXRwdXRQYXRoPgogICAgPE9wdGltaXplPnRydWU8L09wdGltaXplPgogICAgPFNpZ25NYW5pZmVzdHM+ZmFsc2U8L1NpZ25NYW5pZmVzdHM+CiAgPC9Qcm9wZXJ0eUdyb3VwPgogIDxJdGVtR3JvdXA+CiAgICA8Q29tcGlsZSBJbmNsdWRlPSJMYXVuY2hlci5jcyIgLz4KICAgIDxSZWZlcmVuY2UgSW5jbHVkZT0iU3lzdGVtIiAvPgogIDwvSXRlbUdyb3VwPgo8L1Byb2plY3Q+"
-          [IO.File]::WriteAllBytes("$launcherDir\Launcher.csproj", [Convert]::FromBase64String($projB64))
+          # Compile directly with csc.exe — no project file needed
+          $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          $exeOut = "$tmpDir\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
+          & $csc /nologo /optimize /target:exe /out:$exeOut $csFile
+          if ($LASTEXITCODE -ne 0) { throw "csc.exe failed" }
 
-          msbuild "$launcherDir\Launcher.csproj" /p:Configuration=Release /p:Platform=AnyCPU /p:SignManifests=false
-
-          $exeOut = "$launcherDir\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
-          if (Test-Path $exeOut) {
-              Copy-Item $exeOut "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
-              Write-Output "EXE staged: $((Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe").Length) bytes"
-          } else { throw "Launcher EXE build failed" }
+          Copy-Item $exeOut "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
+          Write-Output "EXE staged: $((Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe").Length) bytes"
 
       - name: List staging
         shell: pwsh
