@@ -15,13 +15,14 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      # EXE build
-      - name: Restore packages (EXE)
+      # ── Restore packages once (reused for both builds) ────────────────────
+      - name: Restore NuGet packages
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force MiniPlasma\packages -ErrorAction SilentlyContinue
           nuget restore MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln -PackagesDirectory MiniPlasma\packages
 
+      # ── EXE build ──────────────────────────────────────────────────────────
       - name: Build EXE (Costura single-file)
         run: >
           msbuild MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln
@@ -34,43 +35,25 @@ jobs:
           New-Item -ItemType Directory -Force staging | Out-Null
           Copy-Item "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe" staging\
 
-      # Patch project for DLL build
-      - name: Inject DLL export entry point and patch project
+      # ── Patch project for DLL ─────────────────────────────────────────────
+      - name: Add Export.cs and patch csproj
         shell: pwsh
         run: |
           $projDir = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP"
 
-          $exportCs = "using System;`nusing System.Runtime.InteropServices;`nusing System.Threading;`nusing RGiesecke.DllExport;`nnamespace PoC_AbortHydration_ArbitraryRegKey_EoP`n{`n    public class DllEntryPoint`n    {`n        [DllExport(`"Start`", CallingConvention = CallingConvention.StdCall)]`n        public static void Start(IntPtr hwnd, IntPtr hinst,`n            [MarshalAs(UnmanagedType.LPStr)] string lpszCmdLine, int nCmdShow)`n        {`n            new Thread(() => {`n                try {`n                    typeof(Program)`n                        .GetMethod(`"Main`",`n                            System.Reflection.BindingFlags.Static |`n                            System.Reflection.BindingFlags.NonPublic)`n                        ?.Invoke(null, new object[] { new string[0] });`n                } catch { }`n            }) { IsBackground = true }.Start();`n        }`n    }`n}"
+          # Export.cs: plain class, no [DllExport] needed (export injected post-build)
+          $exportCs = "using System;`nusing System.Runtime.InteropServices;`nusing System.Threading;`nnamespace PoC_AbortHydration_ArbitraryRegKey_EoP`n{`n    public class DllEntryPoint`n    {`n        public static void Start(IntPtr hwnd, IntPtr hinst,`n            [MarshalAs(UnmanagedType.LPStr)] string lpszCmdLine, int nCmdShow)`n        {`n            new Thread(() => {`n                try {`n                    typeof(Program)`n                        .GetMethod(`"Main`",`n                            System.Reflection.BindingFlags.Static |`n                            System.Reflection.BindingFlags.NonPublic)`n                        ?.Invoke(null, new object[] { new string[0] });`n                } catch { }`n            }) { IsBackground = true }.Start();`n        }`n    }`n}"
           [IO.File]::WriteAllText("$projDir\Export.cs", $exportCs, [Text.Encoding]::UTF8)
 
-          $pkgPath = "$projDir\packages.config"
-          $pkg = [xml][IO.File]::ReadAllText($pkgPath)
-          $el = $pkg.CreateElement("package")
-          $el.SetAttribute("id",              "UnmanagedExports")
-          $el.SetAttribute("version",         "1.2.7")
-          $el.SetAttribute("targetFramework", "net481")
-          $pkg.packages.AppendChild($el) | Out-Null
-          $pkg.Save((Resolve-Path $pkgPath).Path)
-
+          # Add Export.cs to csproj
           $csprojPath = "$projDir\PoC_AbortHydration_ArbitraryRegKey_EoP.csproj"
           $csproj = [IO.File]::ReadAllText($csprojPath)
           $csproj = $csproj.Replace('<Compile Include="Program.cs" />', '<Compile Include="Export.cs" /><Compile Include="Program.cs" />')
-
-          # Add RGiesecke.DllExport.Metadata reference (attribute stub — in lib\net\)
-          $refLine = '<Reference Include="RGiesecke.DllExport.Metadata"><HintPath>..\packages\UnmanagedExports.1.2.7\lib\net\RGiesecke.DllExport.Metadata.dll</HintPath></Reference>'
-          $csproj = $csproj.Replace('<Reference Include="System" />', "$refLine`n    <Reference Include=`"System`" />")
-
-          # Add UnmanagedExports targets import (tools\, uses Mono.Cecil for IL post-processing)
-          $importLine = '  <Import Project="..\packages\UnmanagedExports.1.2.7\tools\RGiesecke.DllExport.targets" Condition="Exists(' + [char]39 + '..\packages\UnmanagedExports.1.2.7\tools\RGiesecke.DllExport.targets' + [char]39 + ')" />'
-          $csproj = $csproj.Replace('</Project>', $importLine + "`r`n</Project>")
           [IO.File]::WriteAllText($csprojPath, $csproj, [Text.Encoding]::UTF8)
-          Write-Output "Project patched"
+          Write-Output "Export.cs added to project"
 
-      - name: Restore packages (DLL - includes UnmanagedExports)
-        shell: pwsh
-        run: nuget restore MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln -PackagesDirectory MiniPlasma\packages
-
-      - name: Build DLL (x64 with Start export)
+      # ── DLL build ─────────────────────────────────────────────────────────
+      - name: Build DLL (x64, Costura-merged, no export yet)
         run: >
           msbuild "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\PoC_AbortHydration_ArbitraryRegKey_EoP.csproj"
           /p:Configuration=Release /p:Platform=x64
@@ -79,17 +62,69 @@ jobs:
           /p:OutputType=Library
           /p:SignManifests=false /p:Optimize=true
 
-      - name: Stage DLL
+      # ── Inject Start() export via ildasm/ilasm ────────────────────────────
+      - name: Inject native Start() export (ildasm + ilasm)
         shell: pwsh
         run: |
-          $outDir = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\x64\Release"
-          $dll = Get-ChildItem $outDir -Filter "PoC*.dll" | Select-Object -First 1
-          if (-not $dll) { $dll = Get-ChildItem $outDir -Filter "*.dll" | Select-Object -First 1 }
-          Write-Output "Staging: $($dll.Name) ($($dll.Length) bytes)"
-          Copy-Item $dll.FullName "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll"
-          Get-ChildItem staging\ | Format-Table Name, Length
+          $dllIn = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\x64\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.dll"
+          $work  = "$env:TEMP\il_export"
+          New-Item -ItemType Directory -Force $work | Out-Null
 
-      # Publish public release
+          # Find ildasm (prefer x64, avoid ARM)
+          $ildasm = Get-ChildItem "C:\Program Files (x86)\Microsoft SDKs\Windows" -Recurse -Filter "ildasm.exe" -ErrorAction SilentlyContinue |
+                    Where-Object { $_.FullName -notmatch "arm" } |
+                    Sort-Object { if ($_.FullName -match "x64") { 0 } else { 1 } } |
+                    Select-Object -First 1
+          if (-not $ildasm) { throw "ildasm.exe not found" }
+          Write-Output "ildasm: $($ildasm.FullName)"
+
+          # ilasm (64-bit)
+          $ilasm = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\ilasm.exe"
+          if (-not (Test-Path $ilasm)) { throw "ilasm.exe not found" }
+
+          # Disassemble
+          $ilPath = "$work\poc.il"
+          & $ildasm.FullName /all /nobar "/output=$ilPath" $dllIn
+          $ilSize = (Get-Item $ilPath).Length
+          Write-Output "Disassembled — IL size: $ilSize bytes"
+
+          # Patch IL
+          $il = [IO.File]::ReadAllText($ilPath)
+
+          # 1. Insert vtfixup right after .module line
+          $il = [regex]::Replace($il, '(\.module\s+\S+[^\r\n]*(?:\r?\n))', "`$1.vtfixup [1] int64 fromunmanaged at VT_01`r`n.data VT_01 = int64(0)`r`n")
+
+          # 2. Inject .vtentry/.export inside Start() method body (after opening brace)
+          $il = [regex]::Replace($il,
+              '(void\s+Start\s*\([\s\S]*?\)\s*cil\s+managed\s*\{)',
+              "`$1`r`n    .vtentry 1 : 1`r`n    .export [1] as Start",
+              [Text.RegularExpressions.RegexOptions]::Singleline)
+
+          $modIl = "$work\poc_export.il"
+          [IO.File]::WriteAllText($modIl, $il)
+          Write-Output "IL patched"
+
+          # Reassemble (include .res if present)
+          $resFile = "$work\poc.res"
+          $outDll  = "$work\output.dll"
+          $args = @("/dll", "/x64", "/optimize", "/nologo", "/output=$outDll")
+          if (Test-Path $resFile) { $args += "/resource=$resFile" }
+          $args += $modIl
+          & $ilasm @args
+
+          if (Test-Path $outDll) {
+              Copy-Item $outDll "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll"
+              $sz = (Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll").Length
+              Write-Output "DLL staged: $sz bytes"
+          } else {
+              throw "ilasm failed — output DLL not found"
+          }
+
+      - name: List staging artifacts
+        shell: pwsh
+        run: Get-ChildItem staging\ | Format-Table Name, Length
+
+      # ── Publish public release ─────────────────────────────────────────────
       - name: Create GitHub Release (EXE + DLL)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -98,6 +133,6 @@ jobs:
           $tag = "v2.0-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
           gh release create $tag staging\* `
             --title "MiniPlasma v2.0 - EXE + DLL" `
-            --notes "EXE: Costura single-file. DLL: x64, exports Start() rundll32-compatible, all deps embedded." `
+            --notes "EXE: Costura single-file. DLL: x64, exports Start() (rundll32-compatible), all deps embedded via Costura.Fody, export injected via ildasm/ilasm." `
             --repo $env:GITHUB_REPOSITORY
-          Write-Output "Release tag: $tag"
+          Write-Output "Release: $tag"
