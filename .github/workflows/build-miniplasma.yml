@@ -12,17 +12,26 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Restore NuGet packages (fresh download)
+      - name: Restore NuGet packages
         run: |
           Remove-Item -Recurse -Force MiniPlasma\packages -ErrorAction SilentlyContinue
           nuget restore MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln -PackagesDirectory MiniPlasma\packages
         shell: pwsh
 
-      - name: Build solution
-        run: msbuild MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln /p:Configuration=Release /p:Platform="Any CPU" /p:SignManifests=false
+      - name: Build single-file release (Costura.Fody merged)
+        run: >
+          msbuild MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln
+          /p:Configuration=Release
+          /p:Platform="Any CPU"
+          /p:SignManifests=false
+          /p:Optimize=true
 
-      - name: Upload artifact
+      - name: Show output files
+        run: Get-ChildItem MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\ | Format-Table Name, Length
+        shell: pwsh
+
+      - name: Upload single EXE
         uses: actions/upload-artifact@v4
         with:
-          name: MiniPlasma-Release
-          path: MiniPlasma/PoC_AbortHydration_ArbitraryRegKey_EoP/bin/Release/
+          name: MiniPlasma-SingleFile
+          path: MiniPlasma/PoC_AbortHydration_ArbitraryRegKey_EoP/bin/Release/PoC_AbortHydration_ArbitraryRegKey_EoP.exe
