@@ -12,11 +12,14 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Restore NuGet packages
-        run: nuget restore MiniPlasma/PoC_AbortHydration_ArbitraryRegKey_EoP.sln
+      - name: Restore NuGet packages (fresh download)
+        run: |
+          Remove-Item -Recurse -Force MiniPlasma\packages -ErrorAction SilentlyContinue
+          nuget restore MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln -PackagesDirectory MiniPlasma\packages
+        shell: pwsh
 
       - name: Build solution
-        run: msbuild MiniPlasma/PoC_AbortHydration_ArbitraryRegKey_EoP.sln /p:Configuration=Release /p:Platform="Any CPU" /p:SignManifests=false
+        run: msbuild MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln /p:Configuration=Release /p:Platform="Any CPU" /p:SignManifests=false
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
