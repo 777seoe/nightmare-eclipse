@@ -133,70 +133,9 @@ jobs:
         shell: pwsh
         run: |
           $tag = "v6.2-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-
-          $notes = @"
-## MiniPlasma — PoC_AbortHydration_ArbitraryRegKey_EoP
-
-Cloud Files API race condition → arbitrary registry key write → EoP to SYSTEM.
-Reference: https://github.com/nctu6/nightmare-eclipse/tree/main/MiniPlasma
-
----
-
-## Files
-
-| File | Description |
-|------|-------------|
-| ``miniplasma.o`` | Cobalt Strike BOF (x64 COFF object) |
-| ``PoC_AbortHydration_ArbitraryRegKey_EoP.exe`` | Standalone test loader (runs BOF inline, prints log) |
-
----
-
-## Usage
-
-### Cobalt Strike BOF
-
-``````
-beacon> inline-execute miniplasma.o
-``````
-
-- Drops XOR-encrypted runner to ``%TEMP%\mplasXXXXXXXX.exe``
-- Spawns runner with ``CREATE_NO_WINDOW``
-- Runner loads inner exploit via ``Assembly.Load`` (no disk write for inner EXE)
-- Multi-stage exploit escalates current user to SYSTEM via WER scheduled task
-
-### Standalone test (PoC_AbortHydration_ArbitraryRegKey_EoP.exe)
-
-``````
-PoC_AbortHydration_ArbitraryRegKey_EoP.exe
-``````
-
-- Invokes BOF ``go()`` directly (no Beacon required)
-- Waits 30 s for exploit to complete
-- Reads and prints ``%TEMP%\mplas_result.log`` to console
-- Use this to verify the exploit works on a target before deploying the BOF
-
----
-
-## Requirements
-
-- Windows 10 / 11 / Server 2019+ (x64)
-- Cloud Files filter driver (``CldFlt``) loaded — present by default on all modern Windows
-- WER scheduled task ``\Microsoft\Windows\Windows Error Reporting\QueueReporting`` **enabled**
-- No admin rights needed — exploit starts as standard user
-
----
-
-## How it works (stages)
-
-| Stage | Description |
-|-------|-------------|
-| Stage 0 | Spawns Stage 1 + 2 as child processes via ``CreateProcess`` |
-| Stage 1 | Force-token thread races Cloud Files ``AbortHydration`` callback to write arbitrary registry key |
-| Stage 2 | Takes DACL/ownership of ``HKCU\...\CloudFiles\BlockedApps`` to plant symlink |
-| Stage 3 | Copies self as fake ``wermgr.exe``, triggers WER ``QueueReporting`` task → SYSTEM shell |
-"@
-
-          $notes | Out-File "staging\NOTES.md" -Encoding utf8
+          $notesB64 = "IyMgTWluaVBsYXNtYSAtIFBvQ19BYm9ydEh5ZHJhdGlvbl9BcmJpdHJhcnlSZWdLZXlfRW9QCgpDbG91ZCBGaWxlcyBBUEkgcmFjZSBjb25kaXRpb24gLT4gYXJiaXRyYXJ5IHJlZ2lzdHJ5IGtleSB3cml0ZSAtPiBFb1AgdG8gU1lTVEVNLgpSZWZlcmVuY2U6IGh0dHBzOi8vZ2l0aHViLmNvbS9uY3R1Ni9uaWdodG1hcmUtZWNsaXBzZS90cmVlL21haW4vTWluaVBsYXNtYQoKLS0tCgojIyBGaWxlcwoKfCBGaWxlIHwgRGVzY3JpcHRpb24gfAp8LS0tLS0tfC0tLS0tLS0tLS0tLS18CnwgYG1pbmlwbGFzbWEub2AgfCBDb2JhbHQgU3RyaWtlIEJPRiAoeDY0IENPRkYgb2JqZWN0KSB8CnwgYFBvQ19BYm9ydEh5ZHJhdGlvbl9BcmJpdHJhcnlSZWdLZXlfRW9QLmV4ZWAgfCBTdGFuZGFsb25lIHRlc3QgbG9hZGVyIChydW5zIEJPRiBpbmxpbmUsIHByaW50cyBsb2cpIHwKCi0tLQoKIyMgVXNhZ2UKCiMjIyBDb2JhbHQgU3RyaWtlIEJPRgoKYGBgCmJlYWNvbj4gaW5saW5lLWV4ZWN1dGUgbWluaXBsYXNtYS5vCmBgYAoKLSBEcm9wcyBYT1ItZW5jcnlwdGVkIHJ1bm5lciB0byBgJVRFTVAlXG1wbGFzWFhYWFhYWFguZXhlYAotIFNwYXducyBydW5uZXIgd2l0aCBgQ1JFQVRFX05PX1dJTkRPV2AKLSBSdW5uZXIgbG9hZHMgaW5uZXIgZXhwbG9pdCB2aWEgYEFzc2VtYmx5LkxvYWRgIChubyBkaXNrIHdyaXRlIGZvciBpbm5lciBFWEUpCi0gTXVsdGktc3RhZ2UgZXhwbG9pdCBlc2NhbGF0ZXMgY3VycmVudCB1c2VyIHRvIFNZU1RFTSB2aWEgV0VSIHNjaGVkdWxlZCB0YXNrCgojIyMgU3RhbmRhbG9uZSB0ZXN0IChQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5leGUpCgpgYGAKUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AuZXhlCmBgYAoKLSBJbnZva2VzIEJPRiBgZ28oKWAgZGlyZWN0bHkgKG5vIEJlYWNvbiByZXF1aXJlZCkKLSBXYWl0cyAzMCBzIGZvciBleHBsb2l0IHRvIGNvbXBsZXRlCi0gUmVhZHMgYW5kIHByaW50cyBgJVRFTVAlXG1wbGFzX3Jlc3VsdC5sb2dgIHRvIGNvbnNvbGUKLSBVc2UgdGhpcyB0byB2ZXJpZnkgdGhlIGV4cGxvaXQgd29ya3Mgb24gYSB0YXJnZXQgYmVmb3JlIGRlcGxveWluZyB0aGUgQk9GCgotLS0KCiMjIFJlcXVpcmVtZW50cwoKLSBXaW5kb3dzIDEwIC8gMTEgLyBTZXJ2ZXIgMjAxOSsgKHg2NCkKLSBDbG91ZCBGaWxlcyBmaWx0ZXIgZHJpdmVyIChgQ2xkRmx0YCkgbG9hZGVkIC0tIHByZXNlbnQgYnkgZGVmYXVsdCBvbiBhbGwgbW9kZXJuIFdpbmRvd3MKLSBXRVIgc2NoZWR1bGVkIHRhc2sgYFxNaWNyb3NvZnRcV2luZG93c1xXaW5kb3dzIEVycm9yIFJlcG9ydGluZ1xRdWV1ZVJlcG9ydGluZ2AgKiplbmFibGVkKioKLSBObyBhZG1pbiByaWdodHMgbmVlZGVkIC0tIGV4cGxvaXQgc3RhcnRzIGFzIHN0YW5kYXJkIHVzZXIKCi0tLQoKIyMgSG93IGl0IHdvcmtzIChzdGFnZXMpCgp8IFN0YWdlIHwgRGVzY3JpcHRpb24gfAp8LS0tLS0tLXwtLS0tLS0tLS0tLS0tfAp8IFN0YWdlIDAgfCBTcGF3bnMgU3RhZ2UgMSArIDIgYXMgY2hpbGQgcHJvY2Vzc2VzIHZpYSBgQ3JlYXRlUHJvY2Vzc2AgfAp8IFN0YWdlIDEgfCBGb3JjZS10b2tlbiB0aHJlYWQgcmFjZXMgQ2xvdWQgRmlsZXMgYEFib3J0SHlkcmF0aW9uYCBjYWxsYmFjayB0byB3cml0ZSBhcmJpdHJhcnkgcmVnaXN0cnkga2V5IHwKfCBTdGFnZSAyIHwgVGFrZXMgREFDTC9vd25lcnNoaXAgb2YgYEhLQ1VcLi4uXENsb3VkRmlsZXNcQmxvY2tlZEFwcHNgIHRvIHBsYW50IHN5bWxpbmsgfAp8IFN0YWdlIDMgfCBDb3BpZXMgc2VsZiBhcyBmYWtlIGB3ZXJtZ3IuZXhlYCwgdHJpZ2dlcnMgV0VSIGBRdWV1ZVJlcG9ydGluZ2AgdGFzayAtPiBTWVNURU0gc2hlbGwgfA=="
+          $notesText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($notesB64))
+          [IO.File]::WriteAllText("staging\NOTES.md", $notesText, [Text.Encoding]::UTF8)
           gh release create $tag staging\miniplasma.o "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe" `
             --title "MiniPlasma v6.2 - BOF + Test Loader" `
             --notes-file "staging\NOTES.md" `
