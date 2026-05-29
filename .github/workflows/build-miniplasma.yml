@@ -88,15 +88,18 @@ jobs:
           [IO.File]::WriteAllText("$bofDir\bof.c", $bofSrc, [Text.Encoding]::UTF8)
           Write-Output "bof.c: $((Get-Item "$bofDir\bof.c").Length) bytes"
 
-          $cl = Get-ChildItem "C:\Program Files\Microsoft Visual Studio" `
-              -Recurse -Filter "cl.exe" -ErrorAction SilentlyContinue |
-              Where-Object { $_.FullName -match "Hostx64\\x64" } |
-              Select-Object -First 1 -ExpandProperty FullName
-          if (-not $cl) { throw "cl.exe not found" }
-          Write-Output "Compiler: $cl"
+          # Find vcvars64.bat and compile with MSVC environment set up
+          $vsBase = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
+          $vcvars = "$vsBase\VC\Auxiliary\Build\vcvars64.bat"
+          if (-not (Test-Path $vcvars)) {
+              $vsBase = (& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath 2>$null)
+              $vcvars = "$vsBase\VC\Auxiliary\Build\vcvars64.bat"
+          }
+          Write-Output "vcvars: $vcvars"
 
           $bofObj = "$bofDir\miniplasma.o"
-          & $cl /c /GS- /W0 /nologo /O2 "$bofDir\bof.c" "/Fo$bofObj"
+          $clcmd = "call `"$vcvars`" && cl.exe /c /GS- /W0 /nologo /O2 `"$bofDir\bof.c`" /Fo`"$bofObj`""
+          cmd /c $clcmd
           if ($LASTEXITCODE -ne 0) { throw "BOF compile failed" }
           Write-Output "BOF object: $((Get-Item $bofObj).Length) bytes"
           Write-Output "BOF_OBJ=$bofObj" >> $env:GITHUB_ENV
