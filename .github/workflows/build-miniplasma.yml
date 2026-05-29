@@ -133,8 +133,72 @@ jobs:
         shell: pwsh
         run: |
           $tag = "v6.2-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-          gh release create $tag staging\* `
+
+          $notes = @"
+## MiniPlasma — PoC_AbortHydration_ArbitraryRegKey_EoP
+
+Cloud Files API race condition → arbitrary registry key write → EoP to SYSTEM.
+Reference: https://github.com/nctu6/nightmare-eclipse/tree/main/MiniPlasma
+
+---
+
+## Files
+
+| File | Description |
+|------|-------------|
+| ``miniplasma.o`` | Cobalt Strike BOF (x64 COFF object) |
+| ``PoC_AbortHydration_ArbitraryRegKey_EoP.exe`` | Standalone test loader (runs BOF inline, prints log) |
+
+---
+
+## Usage
+
+### Cobalt Strike BOF
+
+``````
+beacon> inline-execute miniplasma.o
+``````
+
+- Drops XOR-encrypted runner to ``%TEMP%\mplasXXXXXXXX.exe``
+- Spawns runner with ``CREATE_NO_WINDOW``
+- Runner loads inner exploit via ``Assembly.Load`` (no disk write for inner EXE)
+- Multi-stage exploit escalates current user to SYSTEM via WER scheduled task
+
+### Standalone test (PoC_AbortHydration_ArbitraryRegKey_EoP.exe)
+
+``````
+PoC_AbortHydration_ArbitraryRegKey_EoP.exe
+``````
+
+- Invokes BOF ``go()`` directly (no Beacon required)
+- Waits 30 s for exploit to complete
+- Reads and prints ``%TEMP%\mplas_result.log`` to console
+- Use this to verify the exploit works on a target before deploying the BOF
+
+---
+
+## Requirements
+
+- Windows 10 / 11 / Server 2019+ (x64)
+- Cloud Files filter driver (``CldFlt``) loaded — present by default on all modern Windows
+- WER scheduled task ``\Microsoft\Windows\Windows Error Reporting\QueueReporting`` **enabled**
+- No admin rights needed — exploit starts as standard user
+
+---
+
+## How it works (stages)
+
+| Stage | Description |
+|-------|-------------|
+| Stage 0 | Spawns Stage 1 + 2 as child processes via ``CreateProcess`` |
+| Stage 1 | Force-token thread races Cloud Files ``AbortHydration`` callback to write arbitrary registry key |
+| Stage 2 | Takes DACL/ownership of ``HKCU\...\CloudFiles\BlockedApps`` to plant symlink |
+| Stage 3 | Copies self as fake ``wermgr.exe``, triggers WER ``QueueReporting`` task → SYSTEM shell |
+"@
+
+          $notes | Out-File "staging\NOTES.md" -Encoding utf8
+          gh release create $tag staging\miniplasma.o "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe" `
             --title "MiniPlasma v6.2 - BOF + Test Loader" `
-            --notes "miniplasma.o: CS BOF. EXE: test_loader - invokes BOF go(), waits 30s, reads mplas_result.log. Fix: runner.exe uses FileMode.Append+FileShare.ReadWrite so all exploit stages can write to shared log." `
+            --notes-file "staging\NOTES.md" `
             --repo $env:GITHUB_REPOSITORY
           Write-Output "Release: $tag"
